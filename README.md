@@ -82,6 +82,9 @@ This writes (config-only, no ISO):
   Cloudbase-Init conf dir and run `run-sysprep.bat` before sealing.
 - **KVM**: `virt-install --cloud-init user-data=./user-data,meta-data=./meta-data`,
   or drop-in on the image. Windows same as vSphere for conf files.
+- **Passwords are hashed by default** with a `$6$` SHA-512 crypt hash
+  (cloud-init rejects plaintext). Resolution: host `crypt()` → `openssl passwd -6`
+  → pure-stdlib fallback. Use `--plaintext-password` to emit plaintext (discouraged).
 - **No ISO** is produced — CloudSeed is config-only. Full apply steps in
   [GUIDE.md](GUIDE.md).
 

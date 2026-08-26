@@ -77,12 +77,16 @@ def build_user_data(cfg: TemplateConfig) -> str:
         top["hostname"] = cfg.hostname
 
     if cfg.has("users") and cfg.username:
+        from .password import hash_password
+        passwd = cfg.password
+        if not cfg.plaintext_password:
+            passwd = hash_password(cfg.password, cfg.password_rounds)
         user: Dict[str, Any] = {"name": cfg.username, "groups": "sudo" if cfg.sudo else None}
         if cfg.sudo:
             user["sudo"] = "ALL=(ALL) NOPASSWD:ALL"
         user["lock_passwd"] = cfg.lock_password
         if not cfg.lock_password:
-            user["passwd"] = cfg.password
+            user["passwd"] = passwd
         if cfg.has("ssh") and cfg.ssh_keys:
             user["ssh_authorized_keys"] = cfg.ssh_keys
         top["users"] = [{k: v for k, v in user.items() if v is not None}]
@@ -127,7 +131,23 @@ def build_user_data(cfg: TemplateConfig) -> str:
             for f in cfg.write_files
         ]
 
-    if cfg.has("network") and cfg.net_mode == "static":
+    if cfg.has("network") and cfg.net_mode == "static" and cfg.os_type == "windows":
+        # Cloudbase-Init applies static netsvc via first-boot; Linux uses cloud-config.
+        cmds = [
+            f'netsh interface ip set address name="{cfg.net_interface or "Ethernet"}" '
+            f'static {cfg.net_address} {cfg.net_netmask} {cfg.net_gateway}'
+        ]
+        for d in cfg.net_dns:
+            cmds.append(f'netsh interface ip add dns name="{cfg.net_interface or "Ethernet"}" '
+                        f'{d} index=1')
+        if cfg.has("firstboot"):
+            cfg.firstboot = cfg.firstboot + cmds
+        else:
+            cfg.firstboot = cmds
+            if "firstboot" not in cfg.modules:
+                cfg.modules.append("firstboot")
+
+    if cfg.has("network") and cfg.net_mode == "static" and cfg.os_type == "linux":
         iface = cfg.net_interface or "eth0"
         eth: Dict[str, Any] = {"dhcp4": False,
                                "addresses": [f"{cfg.net_address}/{_cidr(cfg.net_netmask)}"]}
@@ -188,8 +208,12 @@ def _ini(conf: Dict[str, str]) -> str:
 def build_cloudbase_conf(cfg: TemplateConfig, unattend: bool) -> str:
     conf: Dict[str, str] = {}
     if cfg.has("users") and cfg.username:
+        from .password import hash_password
+        pw = cfg.password
+        if not cfg.plaintext_password:
+            pw = hash_password(cfg.password, cfg.password_rounds)
         conf["username"] = cfg.username
-        conf["password"] = cfg.password
+        conf["password"] = pw
         conf["groups"] = "Administrators"
         conf["first_logon_behaviour"] = "always"
         conf["inject_user_password"] = "True"

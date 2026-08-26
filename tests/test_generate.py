@@ -118,3 +118,62 @@ def test_roundtrip_json():
     assert cfg2.hostname == "h"
     assert cfg2.username == "u"
     assert cfg2.modules == ["hostname", "users"]
+
+
+def test_hash_password_matches_host():
+    import crypt as _host
+    from cloudseed.password import hash_password
+    h = hash_password("Secret123!", rounds=1000)
+    assert h.startswith("$6$")
+    assert _host.crypt("Secret123!", h) == h
+
+
+def test_pure_crypt_sha512_self_consistent():
+    """Pure impl must be internally stable and re-verify against itself."""
+    from cloudseed.crypt_sha512 import sha512_crypt
+    for pw, salt in [("Hello world!", "saltstring"), ("password", "abcdefgh"),
+                     ("", "XyZ1234567890abc")]:
+        h = sha512_crypt(pw, salt, 1000)
+        assert h.startswith("$6$")
+        assert sha512_crypt(pw, salt, 1000) == h  # deterministic
+
+
+def test_openssl_fallback_matches_host():
+    import shutil, crypt as _host
+    from cloudseed.password import _openssl_sha512
+    if not shutil.which("openssl"):
+        pytest.skip("openssl not on PATH")
+    h = _openssl_sha512("Secret123!", "salt1234567890ab", 1000)
+    assert _host.crypt("Secret123!", h) == h
+
+
+def test_user_data_hashes_password_by_default():
+    from cloudseed import generate as G
+    cfg = TemplateConfig(os_type="linux", modules=["users"],
+                         username="admin", password="Secret123!")
+    ud = G.build_user_data(cfg)
+    assert "$6$" in ud
+    assert "Secret123!" not in ud
+
+
+def test_plaintext_password_opt_out():
+    from cloudseed import generate as G
+    cfg = TemplateConfig(os_type="linux", modules=["users"], plaintext_password=True,
+                         username="admin", password="Secret123!")
+    ud = G.build_user_data(cfg)
+    assert 'passwd: "Secret123!"' in ud
+
+
+def test_windows_static_network_via_runcmd():
+    from cloudseed import generate as G
+    cfg = TemplateConfig(os_type="windows", modules=["network", "users"],
+                         net_mode="static", net_interface="Ethernet",
+                         net_address="192.168.1.60", net_netmask="255.255.255.0",
+                         net_gateway="192.168.1.1", net_dns=["8.8.8.8"],
+                         username="admin", password="p")
+    ud = G.build_user_data(cfg)
+    # user-data for windows also carries the runcmd (Cloudbase-Init consumes it)
+    assert "netsh interface ip set address" in ud
+    assert "192.168.1.60" in ud
+    conf = G.build_cloudbase_conf(cfg, unattend=False)
+    assert "$6$" in conf or "password:" in conf

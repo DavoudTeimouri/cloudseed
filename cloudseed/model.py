@@ -23,6 +23,8 @@ class TemplateConfig:
     # --- users ---
     username: str = "admin"
     password: str = "ChangeMe!123"
+    plaintext_password: bool = False    # emit plaintext instead of hashed (discouraged)
+    password_rounds: int = 5000
     sudo: bool = True
     lock_password: bool = False
     ssh_pwauth: bool = False

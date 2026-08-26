@@ -18,17 +18,19 @@ def _print_generated(written: List[str]) -> None:
     print()
 
 
-def run_batch(json_path: str, out_dir: str) -> int:
+def run_batch(json_path: str, out_dir: str, plaintext: bool = False) -> int:
     cfg = load_json(json_path)
+    cfg.plaintext_password = plaintext
     written = generate_all(cfg, out_dir)
     _print_generated(written)
     return 0
 
 
-def run_interactive(out_dir: str) -> int:
+def run_interactive(out_dir: str, plaintext: bool = False) -> int:
     print("cloudseed — cloud-init VM template generator")
     print("=" * 48)
     cfg = collect_interactive()
+    cfg.plaintext_password = plaintext
 
     if not out_dir:
         out_dir = input("\nOutput directory [./out]: ").strip() or "./out"
@@ -54,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Apply a saved config (JSON) and generate files (batch mode).")
     p.add_argument("--out", metavar="DIR", default="",
                    help="Output directory (default ./out in interactive mode).")
+    p.add_argument("--plaintext-password", action="store_true",
+                   help="Emit the password in plaintext instead of a $6$ SHA-512 hash (discouraged).")
     p.add_argument("--print", action="store_true",
                    help="(batch) also print generated contents to stdout.")
     return p
@@ -64,9 +68,9 @@ def main(argv: List[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.json:
-        return run_batch(args.json, args.out or "./out")
+        return run_batch(args.json, args.out or "./out", args.plaintext_password)
 
-    return run_interactive(args.out)
+    return run_interactive(args.out, args.plaintext_password)
 
 
 if __name__ == "__main__":
