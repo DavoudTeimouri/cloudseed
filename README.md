@@ -1,4 +1,4 @@
-# cloudseed
+# CloudSeed
 
 Command-line menu app that builds **cloud-init** customization templates for
 new VM provisioning on **VMware vSphere** and **KVM** — for both **Linux**

@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Generate cloud-init / Cloudbase-Init VM templates "
                     "for vSphere and KVM (Linux + Windows).",
     )
-    p.add_argument("--version", action="version", version=f"cloudseed {__version__}")
+    p.add_argument("--version", action="version", version=f"CloudSeed {__version__}")
     p.add_argument("--json", metavar="FILE",
                    help="Apply a saved config (JSON) and generate files (batch mode).")
     p.add_argument("--out", metavar="DIR", default="",
