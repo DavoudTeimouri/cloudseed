@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloudseed"
+version = "0.1.0"
+description = "Cloud-init VM template customization CLI for vSphere and KVM (Linux + Windows)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["cloud-init", "cloudbase-init", "vsphere", "kvm", "vm", "provisioning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[project.scripts]
+cloudseed = "cloudseed.cli:main"
+
+[tool.setuptools]
+packages = ["cloudseed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
