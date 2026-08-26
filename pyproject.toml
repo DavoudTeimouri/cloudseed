@@ -16,6 +16,9 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
 ]
 
+[project.optional-dependencies]
+build = ["pyinstaller>=5.0"]
+
 [project.scripts]
 cloudseed = "cloudseed.cli:main"
 

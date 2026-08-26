@@ -1,0 +1,3 @@
+# Build-only dependency (NOT required to run CloudSeed).
+# CloudSeed itself is stdlib-only; this is only for `python build_dist.py`.
+pyinstaller>=5.0

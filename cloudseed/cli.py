@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="cloudseed",
         description="Generate cloud-init / Cloudbase-Init VM templates "
-                    "for vSphere and KVM (Linux + Windows).",
+                    "for vSphere and KVM (Linux + Windows). Config-only (no ISO).",
     )
     p.add_argument("--version", action="version", version=f"CloudSeed {__version__}")
     p.add_argument("--json", metavar="FILE",

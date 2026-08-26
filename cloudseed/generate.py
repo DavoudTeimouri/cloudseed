@@ -1,10 +1,11 @@
-"""Render a TemplateConfig into cloud-init / Cloudbase-Init files.
+"""Render a TemplateConfig into cloud-init / Cloudbase-Init / Sysprep files.
 
-Minimal YAML emitter (no PyYAML dependency) sufficient for cloud-config.
+Config-only output: no ISO is produced. Minimal YAML emitter (no PyYAML).
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List
 
 from .model import TemplateConfig
@@ -16,9 +17,7 @@ def _needs_quote(s: str) -> bool:
     if s == "":
         return True
     unsafe = set("#':{}[],&*?|<>=!%@`\"\\")
-    if s[0] in unsafe or s[-1] in unsafe:
-        return True
-    if any(c in unsafe for c in s):
+    if s[0] in unsafe or s[-1] in unsafe or any(c in unsafe for c in s):
         return True
     if s.lower() in ("true", "false", "null", "yes", "no", "on", "off"):
         return True
@@ -39,7 +38,6 @@ def _scalar(s: Any) -> str:
 def yaml_dump(obj: Any, indent: int = 0) -> str:
     pad = "  " * indent
     lines: List[str] = []
-
     if isinstance(obj, dict):
         if not obj:
             return pad + "{}"
@@ -52,7 +50,7 @@ def yaml_dump(obj: Any, indent: int = 0) -> str:
                     lines.append(f"{pad}{k}:")
                     lines.append(yaml_dump(v, indent + 1))
                 else:
-                    lines.append(f"{pad}{k}: {_scalar(v) if not isinstance(v, (dict, list)) else '[]' if isinstance(v, list) else '{}'}")
+                    lines.append(f"{pad}{k}: {'{}' if isinstance(v, dict) else '[]'}")
             else:
                 lines.append(f"{pad}{k}: {_scalar(v)}")
     elif isinstance(obj, list):
@@ -61,12 +59,8 @@ def yaml_dump(obj: Any, indent: int = 0) -> str:
         for item in obj:
             if isinstance(item, (dict, list)):
                 body = yaml_dump(item, indent + 1).split("\n")
-                # join first line to the "- "
-                first = body[0]
-                rest = body[1:]
-                lines.append(f"{pad}- {first.lstrip()}")
-                for r in rest:
-                    lines.append(r)
+                lines.append(f"{pad}- {body[0].lstrip()}")
+                lines.extend(body[1:])
             else:
                 lines.append(f"{pad}- {_scalar(item)}")
     else:
@@ -74,7 +68,7 @@ def yaml_dump(obj: Any, indent: int = 0) -> str:
     return "\n".join(lines)
 
 
-# --- cloud-config (user-data) ---------------------------------------------
+# --- cloud-config (Linux user-data) ---------------------------------------
 
 def build_user_data(cfg: TemplateConfig) -> str:
     top: Dict[str, Any] = {}
@@ -82,70 +76,87 @@ def build_user_data(cfg: TemplateConfig) -> str:
     if cfg.has("hostname") and cfg.hostname:
         top["hostname"] = cfg.hostname
 
-    if cfg.has("user") and cfg.username:
-        user: Dict[str, Any] = {"name": cfg.username}
-        if cfg.os_type == "linux":
-            user["groups"] = "sudo"
-            if cfg.sudo:
-                user["sudo"] = "ALL=(ALL) NOPASSWD:ALL"
-        if cfg.lock_password:
-            user["lock_passwd"] = True
-        else:
+    if cfg.has("users") and cfg.username:
+        user: Dict[str, Any] = {"name": cfg.username, "groups": "sudo" if cfg.sudo else None}
+        if cfg.sudo:
+            user["sudo"] = "ALL=(ALL) NOPASSWD:ALL"
+        user["lock_passwd"] = cfg.lock_password
+        if not cfg.lock_password:
             user["passwd"] = cfg.password
-            user["lock_passwd"] = False
         if cfg.has("ssh") and cfg.ssh_keys:
             user["ssh_authorized_keys"] = cfg.ssh_keys
-        # drop Nones
-        user = {k: v for k, v in user.items() if v is not None}
-        top["users"] = [user]
+        top["users"] = [{k: v for k, v in user.items() if v is not None}]
 
-    if cfg.has("ssh") and cfg.ssh_keys and not (cfg.has("user") and cfg.username):
-        top["ssh_authorized_keys"] = cfg.ssh_keys
+    if cfg.has("ssh"):
+        top["ssh_pwauth"] = cfg.ssh_pwauth
+        if cfg.ssh_keys and not (cfg.has("users") and cfg.username):
+            top["ssh_authorized_keys"] = cfg.ssh_keys
 
-    if cfg.has("packages") and cfg.packages:
+    if cfg.has("root") and cfg.disable_root:
+        top["disable_root"] = True
+
+    if cfg.has("packages"):
         top["package_update"] = True
-        top["packages"] = cfg.packages
+        top["package_upgrade"] = cfg.package_upgrade
+        if cfg.packages:
+            top["packages"] = cfg.packages
+        if cfg.package_reboot_if_required:
+            top["package_reboot_if_required"] = True
 
-    if cfg.has("timezone") and cfg.timezone:
+    if cfg.has("locale"):
         top["timezone"] = cfg.timezone
+        top["locale"] = cfg.locale
+        top["keyboard"] = {"layout": cfg.keyboard_layout}
 
-    if cfg.has("growpart") and cfg.grow_device:
-        top["growpart"] = {
-            "mode": "auto",
-            "devices": [f"{cfg.grow_device}{cfg.grow_partition}"],
-        }
+    if cfg.has("disk") and cfg.grow_device:
+        top["growpart"] = {"mode": "auto",
+                           "devices": [f"{cfg.grow_device}{cfg.grow_partition}"]}
 
     if cfg.has("ntp") and cfg.ntp_servers:
-        top["ntp"] = {"servers": cfg.ntp_servers}
+        ntp: Dict[str, Any] = {}
+        if cfg.ntp_servers:
+            ntp["servers"] = cfg.ntp_servers
+        if cfg.ntp_pools:
+            ntp["pools"] = cfg.ntp_pools
+        top["ntp"] = ntp
+
+    if cfg.has("files") and cfg.write_files:
+        top["write_files"] = [
+            {"path": f["path"], "content": f["content"],
+             "permissions": f.get("permissions", "0644")}
+            for f in cfg.write_files
+        ]
 
     if cfg.has("network") and cfg.net_mode == "static":
-        net: Dict[str, Any] = {
-            "version": 2,
-            "ethernets": {
-                (cfg.net_interface or "eth0"): {
-                    "dhcp4": False,
-                    "addresses": [f"{cfg.net_address}/{_cidr(cfg.net_netmask)}"],
-                    "gateway4": cfg.net_gateway,
-                }
-            },
-        }
+        iface = cfg.net_interface or "eth0"
+        eth: Dict[str, Any] = {"dhcp4": False,
+                               "addresses": [f"{cfg.net_address}/{_cidr(cfg.net_netmask)}"]}
+        if cfg.net_gateway:
+            eth["gateway4"] = cfg.net_gateway
         if cfg.net_dns:
-            net["ethernets"][cfg.net_interface or "eth0"]["nameservers"] = {
-                "addresses": cfg.net_dns
-            }
-        top["network"] = net
+            eth["nameservers"] = {"addresses": cfg.net_dns}
+            if cfg.net_search:
+                eth["nameservers"]["search"] = cfg.net_search
+        top["network"] = {"version": 2, "ethernets": {iface: eth}}
+
+    if cfg.has("bootcmd") and cfg.bootcmd:
+        top["bootcmd"] = cfg.bootcmd
 
     if cfg.has("firstboot") and cfg.firstboot:
         top["runcmd"] = cfg.firstboot
+
+    if cfg.has("final") and cfg.final_message:
+        top["final_message"] = cfg.final_message
 
     return "#cloud-config\n" + _render_top(top)
 
 
 def _render_top(top: Dict[str, Any]) -> str:
-    # stabilize key order: known cloud-init ordering
     order = [
-        "hostname", "users", "ssh_authorized_keys", "package_update",
-        "packages", "timezone", "growpart", "ntp", "network", "runcmd",
+        "hostname", "users", "disable_root", "ssh_pwauth", "ssh_authorized_keys",
+        "package_update", "package_upgrade", "package_reboot_if_required",
+        "packages", "timezone", "locale", "keyboard", "growpart", "ntp",
+        "write_files", "network", "bootcmd", "runcmd", "final_message",
     ]
     ordered = {k: top[k] for k in order if k in top}
     for k in top:
@@ -155,7 +166,6 @@ def _render_top(top: Dict[str, Any]) -> str:
 
 
 def _cidr(netmask: str) -> int:
-    # convert dotted netmask to prefix length
     try:
         bits = "".join(f"{int(o):08b}" for o in netmask.split("."))
         return bits.count("1")
@@ -164,35 +174,20 @@ def _cidr(netmask: str) -> int:
 
 
 def build_meta_data(cfg: TemplateConfig) -> str:
-    lines = ["instance-id: iid-cloudseed", "local-hostname: " +
-             (cfg.hostname or "cloudseed-vm")]
-    if cfg.has("network") and cfg.net_mode == "static":
-        # meta-data can carry static network for NoCloud
-        lines.append("network-interfaces: |")
-        iface = cfg.net_interface or "eth0"
-        lines.append(f"  auto {iface}")
-        lines.append(f"  iface {iface} inet static")
-        lines.append(f"    address {cfg.net_address}")
-        lines.append(f"    netmask {cfg.net_netmask}")
-        lines.append(f"    gateway {cfg.net_gateway}")
-        for dns in cfg.net_dns:
-            lines.append(f"    dns-nameservers {dns}")
+    lines = ["instance-id: iid-cloudseed",
+             "local-hostname: " + (cfg.hostname or "cloudseed-vm")]
     return "\n".join(lines) + "\n"
 
 
 # --- Cloudbase-Init (Windows) ---------------------------------------------
 
 def _ini(conf: Dict[str, str]) -> str:
-    out = ["[DEFAULT]"]
-    # preserve given key order
-    for k, v in conf.items():
-        out.append(f"{k}: {v}")
-    return "\n".join(out) + "\n"
+    return "\n".join(f"{k}: {v}" for k, v in conf.items()) + "\n"
 
 
 def build_cloudbase_conf(cfg: TemplateConfig, unattend: bool) -> str:
     conf: Dict[str, str] = {}
-    if cfg.has("user") and cfg.username:
+    if cfg.has("users") and cfg.username:
         conf["username"] = cfg.username
         conf["password"] = cfg.password
         conf["groups"] = "Administrators"
@@ -213,25 +208,92 @@ def build_cloudbase_conf(cfg: TemplateConfig, unattend: bool) -> str:
         "C:\\Program Files\\Cloudbase Solutions\\Cloudbase-Init\\LocalScripts"
     )
     conf["allow_reboot"] = "True"
-    if unattend:
-        conf["metadata_services"] = (
-            "cloudbaseinit.metadata.services.winrmconfigdrive.WinRmConfigDrive"
-        )
-    else:
-        conf["metadata_services"] = (
-            "cloudbaseinit.metadata.services.configdrive.ConfigDrive"
-        )
+    conf["metadata_services"] = (
+        "cloudbaseinit.metadata.services.configdrive.ConfigDrive"
+        if not unattend else
+        "cloudbaseinit.metadata.services.winrmconfigdrive.WinRmConfigDrive"
+    )
     return _ini(conf)
+
+
+# --- Windows Sysprep answer file (specialize = new SID) --------------------
+
+def build_sysprep_unattend(cfg: TemplateConfig) -> str:
+    if not cfg.sysprep:
+        return ""
+    pk = f"<ProductKey>{cfg.sysprep_product_key}</ProductKey>" if cfg.sysprep_product_key else ""
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+  <settings pass="generalize">
+    <component name="Microsoft-Windows-PnpSysprep" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/Unattend" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <PersistAllDeviceInstalls>false</PersistAllDeviceInstalls>
+      <DoNotCleanUpNonPresentDevices>false</DoNotCleanUpNonPresentDevices>
+    </component>
+    <component name="Microsoft-Windows-Security-SPP" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/Unattend" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <SkipRearm>1</SkipRearm>
+    </component>
+  </settings>
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/Unattend" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <ComputerName>{cfg.sysprep_computer_prefix}-*</ComputerName>
+      <ProductKey>{cfg.sysprep_product_key}</ProductKey>
+      <RegisteredOrganization>{cfg.sysprep_organization}</RegisteredOrganization>
+      <RegisteredOwner>{cfg.sysprep_owner}</RegisteredOwner>
+      <TimeZone>{cfg.sysprep_timezone}</TimeZone>
+    </component>
+    <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/Unattend" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <UserLocale>{cfg.sysprep_locale}</UserLocale>
+      <SystemLocale>{cfg.sysprep_locale}</SystemLocale>
+      <UILanguage>{cfg.sysprep_locale}</UILanguage>
+      <InputLocale>{cfg.sysprep_locale}</InputLocale>
+    </component>
+  </settings>
+  <settings pass="oobe">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/Unattend" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <RegisteredOrganization>{cfg.sysprep_organization}</RegisteredOrganization>
+      <RegisteredOwner>{cfg.sysprep_owner}</RegisteredOwner>
+      <TimeZone>{cfg.sysprep_timezone}</TimeZone>
+    </component>
+  </settings>
+</unattend>
+""".replace("<ProductKey></ProductKey>", "<!-- no product key -->")
+
+
+def build_sysprep_bat(cfg: TemplateConfig) -> str:
+    if not cfg.sysprep:
+        return ""
+    return (
+        "@echo off\n"
+        "REM CloudSeed Sysprep: generalize VM -> new SID on next boot.\n"
+        'set "UNATTEND=%~dp0sysprep-unattend.xml"\n'
+        "if not exist \"%UNATTEND%\" (\n"
+        "  echo ERROR: sysprep-unattend.xml not found next to this script.\n"
+        "  exit /b 1\n"
+        ")\n"
+        'echo Running Sysprep (generalize + oobe, shutdown)...\n'
+        'C:\\Windows\\System32\\sysprep\\sysprep.exe /generalize /oobe /shutdown /unattend:"%UNATTEND%"\n'
+    )
 
 
 # --- README ----------------------------------------------------------------
 
 def build_readme(cfg: TemplateConfig) -> str:
     plat = "VMware vSphere" if cfg.platform == "vsphere" else "KVM (libvirt)"
-    osname = "Linux (cloud-init)" if cfg.os_type == "linux" else "Windows (Cloudbase-Init)"
+    osname = "Linux (cloud-init)" if cfg.os_type == "linux" else "Windows (Cloudbase-Init + Sysprep)"
     lines = [
-        "cloudseed generated template",
-        "============================",
+        "CloudSeed generated configuration (NO ISO -- config files only)",
+        "=" * 64,
         f"Platform : {plat}",
         f"Guest OS : {osname}",
         f"Modules  : {', '.join(cfg.modules) or '(none)'}",
@@ -241,47 +303,42 @@ def build_readme(cfg: TemplateConfig) -> str:
     if cfg.os_type == "linux":
         lines += [
             "  user-data   - cloud-config customization",
-            "  meta-data   - instance identity / network",
+            "  meta-data   - instance identity",
+            "  cloudseed.json - this config (re-usable)",
         ]
     else:
         lines += [
-            "  user-data   - cloud-config (consumed by Cloudbase-Init cloudconfig plugin)",
-            "  meta-data   - instance identity",
             "  cloudbase-init.conf            - main service config",
             "  cloudbase-init-unattend.conf   - unattend-phase config",
+            "  sysprep-unattend.xml           - Sysprep answer file (new SID)",
+            "  run-sysprep.bat                - launch Sysprep generalize",
+            "  cloudseed.json                 - this config (re-usable)",
         ]
-
-    lines += ["", "Apply on " + plat + ":"]
+    lines += ["", "Apply (no ISO) - see GUIDE.md for full steps:"]
     if cfg.platform == "vsphere":
         lines += [
-            "  1. Build a config-drive ISO from user-data + meta-data:",
-            "       mkisofs -o seed.iso -V cidata -J -r user-data meta-data",
-            "  2. Attach seed.iso as a CD-ROM to the VM before first boot.",
-            "     (For Windows, also place the two .conf files into",
-            "      C:\\Program Files\\Cloudbase Solutions\\Cloudbase-Init\\conf\\"
-            "      before sealing the template.)",
+            "  Linux : guestinfo/vApp OR drop into /etc/cloud/cloud.cfg.d/ on image.",
+            "  Windows: place .conf in Cloudbase-Init conf dir; run run-sysprep.bat",
+            "           BEFORE sealing the template.",
         ]
-    else:  # kvm
+    else:
         lines += [
-            "  Linux:",
-            "    virt-install --cloud-init user-data=./user-data,meta-data=./meta-data ...",
-            "  or build a NoCloud seed ISO:",
-            "    mkisofs -o seed.iso -V cidata -J -r user-data meta-data",
-            "    virsh attach-disk <domain> seed.iso --target sdc --type cdrom",
-            "  Windows: place the two .conf files into",
-            "    C:\\Program Files\\Cloudbase Solutions\\Cloudbase-Init\\conf\\"
-            "    and provide user-data/meta-data via a config-drive ISO.",
+            "  Linux : virt-install --cloud-init user-data=./user-data,meta-data=./meta-data",
+            "          or copy into /etc/cloud/cloud.cfg.d/ on the image.",
+            "  Windows: place .conf in Cloudbase-Init conf dir; run run-sysprep.bat",
+            "           BEFORE sealing the template.",
         ]
     return "\n".join(lines) + "\n"
 
 
 def generate_all(cfg: TemplateConfig, out_dir: str) -> List[str]:
-    import os
-
+    import json as _json
     os.makedirs(out_dir, exist_ok=True)
     written: List[str] = []
 
     def w(name: str, content: str) -> None:
+        if content == "":
+            return
         path = os.path.join(out_dir, name)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(content)
@@ -292,5 +349,10 @@ def generate_all(cfg: TemplateConfig, out_dir: str) -> List[str]:
     if cfg.os_type == "windows":
         w("cloudbase-init.conf", build_cloudbase_conf(cfg, unattend=False))
         w("cloudbase-init-unattend.conf", build_cloudbase_conf(cfg, unattend=True))
+        w("sysprep-unattend.xml", build_sysprep_unattend(cfg))
+        w("run-sysprep.bat", build_sysprep_bat(cfg))
+    with open(os.path.join(out_dir, "cloudseed.json"), "w", encoding="utf-8") as fh:
+        _json.dump(cfg.to_dict(), fh, indent=2)
+    written.append(os.path.join(out_dir, "cloudseed.json"))
     w("README.txt", build_readme(cfg))
     return written
