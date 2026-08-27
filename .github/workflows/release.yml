@@ -51,7 +51,7 @@ jobs:
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-      - name: Create Release
+      - name: Create Release and Upload Linux Asset
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
@@ -60,15 +60,8 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
-      - name: Upload Linux Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.zip.outputs.zip_path }}
-          asset_name: ${{ steps.zip.outputs.asset_name }}
-          asset_content_type: application/zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: ${{ steps.zip.outputs.zip_path }}
+          file_name: ${{ steps.zip.outputs.asset_name }}
 
   build-windows:
     runs-on: windows-latest
@@ -97,8 +90,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           upload_url: ${{ needs.build-linux.outputs.upload_url }}
-          asset_path: ${{ steps.zip.outputs.zip_path }}
-          asset_name: ${{ steps.zip.outputs.asset_name }}
-          asset_content_type: application/zip
+          files: ${{ steps.zip.outputs.zip_path }}
+          file_name: ${{ steps.zip.outputs.asset_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
