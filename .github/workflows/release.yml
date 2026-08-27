@@ -59,8 +59,9 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          file: ${{ steps.binary.outputs.binary }}
-          name: ${{ steps.binary.outputs.asset_name }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.binary.outputs.binary }}
+          asset_name: ${{ steps.binary.outputs.asset_name }}
+          asset_content_type: application/octet-stream
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
