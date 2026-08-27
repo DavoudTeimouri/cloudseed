@@ -40,6 +40,7 @@ jobs:
             echo "asset_name=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
           fi
       - name: Create ZIP archive
+        id: zip
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             cd dist
