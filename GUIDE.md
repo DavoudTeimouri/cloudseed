@@ -101,6 +101,19 @@ keys, hostname, NTP and first-boot scripts are applied on first boot.
 > SSH on Windows requires the OpenSSH Server feature + Cloudbase-Init's
 > `SetUserSSHPublicKeysPlugin` (already enabled in the generated conf).
 
+### Windows static IP (no config drive)
+
+When `net_mode` is `static`, CloudSeed emits `netsh` commands as a first-boot
+script so the IP is applied even without a config drive:
+
+```bat
+netsh interface ip set address "Ethernet" static 192.168.1.60 255.255.255.0 192.168.1.1
+netsh interface ip add dns "Ethernet" 8.8.8.8 index=1
+```
+
+These run on first boot via Cloudbase-Init. DHCP is used when `net_mode`
+is `dhcp` (the default).
+
 ---
 
 ## 5. Windows — Sysprep (CRITICAL: new SID)
