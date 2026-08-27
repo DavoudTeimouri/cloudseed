@@ -34,21 +34,32 @@ jobs:
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             echo "binary=dist/cloudseed.exe" >> $GITHUB_OUTPUT
-            echo "asset_name=cloudseed.exe" >> $GITHUB_OUTPUT
+            echo "asset_name=cloudseed-windows-x86_64.zip" >> $GITHUB_OUTPUT
           else
             echo "binary=dist/cloudseed" >> $GITHUB_OUTPUT
-            echo "asset_name=cloudseed" >> $GITHUB_OUTPUT
+            echo "asset_name=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
+          fi
+      - name: Create ZIP archive
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cd dist
+            7z a ../cloudseed-windows-x86_64.zip cloudseed.exe
+            cd ..
+            echo "zip_path=cloudseed-windows-x86_64.zip" >> $GITHUB_OUTPUT
+          else
+            cd dist
+            zip ../cloudseed-linux-x86_64.zip cloudseed
+            cd ..
+            echo "zip_path=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
           fi
       - name: Generate Changelog
         id: changelog
         run: |
           TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
-          # Escape dots in tag name for regex
           ESCAPED_TAG=$(echo "$TAG_NAME" | sed 's/\./\\./g')
-          # Extract the changelog section for this tag (from the line starting with "## [TAG]" to the next "## [" or end of file)
           CHANGELOG=$(awk -v tag="$ESCAPED_TAG" '
             $0 ~ "^## \\[" tag "\\]" { found=1; next }
-            found && /^## \\[/ { exit }
+            found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md)
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
@@ -63,13 +74,12 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
-          # The GITHUB_TOKEN is automatically provided by the runner
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.binary.outputs.binary }}
+          asset_path: ${{ steps.zip.outputs.zip_path }}
           asset_name: ${{ steps.binary.outputs.asset_name }}
-          asset_content_type: application/octet-stream
+          asset_content_type: application/zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
