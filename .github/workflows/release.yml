@@ -12,12 +12,8 @@ on:
         default: 'v0.2.1'
 
 jobs:
-  build-and-release:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,30 +25,14 @@ jobs:
         run: pip install pyinstaller
       - name: Build portable binary
         run: python build_dist.py
-      - name: Determine binary name and path
-        id: binary
-        run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            echo "binary=dist/cloudseed.exe" >> $GITHUB_OUTPUT
-            echo "asset_name=cloudseed-windows-x86_64.zip" >> $GITHUB_OUTPUT
-          else
-            echo "binary=dist/cloudseed" >> $GITHUB_OUTPUT
-            echo "asset_name=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
-          fi
       - name: Create ZIP archive
         id: zip
         run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cd dist
-            7z a ../cloudseed-windows-x86_64.zip cloudseed.exe
-            cd ..
-            echo "zip_path=cloudseed-windows-x86_64.zip" >> $GITHUB_OUTPUT
-          else
-            cd dist
-            zip ../cloudseed-linux-x86_64.zip cloudseed
-            cd ..
-            echo "zip_path=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
-          fi
+          cd dist
+          zip ../cloudseed-linux-x86_64.zip cloudseed
+          cd ..
+          echo "zip_path=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
+          echo "asset_name=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
       - name: Generate Changelog
         id: changelog
         run: |
@@ -80,7 +60,39 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ steps.zip.outputs.zip_path }}
-          asset_name: ${{ steps.binary.outputs.asset_name }}
+          asset_name: ${{ steps.zip.outputs.asset_name }}
+          asset_content_type: application/zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+      - name: Build portable binary
+        run: python build_dist.py
+      - name: Create ZIP archive
+        id: zip
+        run: |
+          cd dist
+          7z a ../cloudseed-windows-x86_64.zip cloudseed.exe
+          cd ..
+          echo "zip_path=cloudseed-windows-x86_64.zip" >> $env:GITHUB_OUTPUT
+          echo "asset_name=cloudseed-windows-x86_64.zip" >> $env:GITHUB_OUTPUT
+        shell: powershell
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          upload_url: ${{ needs.build-linux.outputs.upload_url }}
+          asset_path: ${{ steps.zip.outputs.zip_path }}
+          asset_name: ${{ steps.zip.outputs.asset_name }}
           asset_content_type: application/zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
