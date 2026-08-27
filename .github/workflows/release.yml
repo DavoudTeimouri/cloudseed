@@ -18,7 +18,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_tag: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -89,7 +89,7 @@ jobs:
       - name: Upload Windows Asset
         uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ needs.build-linux.outputs.upload_url }}
+          tag_name: ${{ needs.build-linux.outputs.release_tag }}
           files: ${{ steps.zip.outputs.zip_path }}
           file_name: ${{ steps.zip.outputs.asset_name }}
         env:
