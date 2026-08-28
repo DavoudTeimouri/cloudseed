@@ -312,7 +312,7 @@ def build_sysprep_bat(cfg: TemplateConfig) -> str:
 
 # --- README ----------------------------------------------------------------
 
-def build_readme(cfg: TemplateConfig) -> str:
+def build_readme(cfg: TemplateConfig, warnings: List[str] = None) -> str:
     plat = "VMware vSphere" if cfg.platform == "vsphere" else "KVM (libvirt)"
     osname = "Linux (cloud-init)" if cfg.os_type == "linux" else "Windows (Cloudbase-Init + Sysprep)"
     lines = [
@@ -338,6 +338,13 @@ def build_readme(cfg: TemplateConfig) -> str:
             "  run-sysprep.bat                - launch Sysprep generalize",
             "  cloudseed.json                 - this config (re-usable)",
         ]
+    
+    # Add warnings if any
+    if warnings:
+        lines += ["", "⚠️  Warnings:"]
+        for w in warnings:
+            lines.append(f"  - {w}")
+    
     lines += ["", "Apply (no ISO) - see GUIDE.md for full steps:"]
     if cfg.platform == "vsphere":
         lines += [
@@ -357,8 +364,12 @@ def build_readme(cfg: TemplateConfig) -> str:
 
 def generate_all(cfg: TemplateConfig, out_dir: str) -> List[str]:
     import json as _json
+    from .cli import validate_config
     os.makedirs(out_dir, exist_ok=True)
     written: List[str] = []
+
+    # Validate and get warnings
+    warnings = validate_config(cfg)
 
     def w(name: str, content: str) -> None:
         if content == "":
@@ -378,5 +389,5 @@ def generate_all(cfg: TemplateConfig, out_dir: str) -> List[str]:
     with open(os.path.join(out_dir, "cloudseed.json"), "w", encoding="utf-8") as fh:
         _json.dump(cfg.to_dict(), fh, indent=2)
     written.append(os.path.join(out_dir, "cloudseed.json"))
-    w("README.txt", build_readme(cfg))
+    w("README.txt", build_readme(cfg, warnings))
     return written

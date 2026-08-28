@@ -137,9 +137,9 @@ def collect_interactive() -> TemplateConfig:
     print("\n(Defaults shown in [brackets]. Press Enter to accept.)")
 
     cfg.platform = _choose(
-        "Target platform:", ["vsphere (VMware)", "kvm (libvirt)"]
-    ).split()[0]
-    cfg.os_type = _choose("Guest OS:", ["linux", "windows"]).split()[0]
+        "Target platform:", ["vSphere (VMware)", "KVM (libvirt)"]
+    ).split()[0].lower()
+    cfg.os_type = _choose("Guest OS:", ["Linux", "Windows"]).split()[0].lower()
 
     available = [(mid, lbl) for (mid, lbl, oses) in MODULES if cfg.os_type in oses]
     print("\nAvailable customization modules (defaults preselected):")

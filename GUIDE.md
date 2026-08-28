@@ -1,8 +1,6 @@
 # CloudSeed Guide — Create & Apply Configurations (No ISO)
 
-CloudSeed produces **configuration files only** — no seed ISO is built. This
-guide shows how to apply those files to new VMs on VMware vSphere and KVM, for
-both Linux (cloud-init) and Windows (Cloudbase-Init + Sysprep).
+CloudSeed produces **configuration files only** — no seed ISO is built. This guide shows how to apply those files to new VMs on VMware vSphere and KVM, for both Linux (cloud-init) and Windows (Cloudbase-Init + Sysprep).
 
 ---
 
@@ -12,7 +10,7 @@ both Linux (cloud-init) and Windows (Cloudbase-Init + Sysprep).
 - `user-data` — the cloud-config customization
 - `meta-data` — instance identity (hostname)
 - `cloudseed.json` — the config itself (re-run or tweak later)
-- `README.txt` — quick reference
+- `README.txt` — quick reference with warnings
 
 **Windows** (`out/`)
 - `cloudbase-init.conf` / `cloudbase-init-unattend.conf` — Cloudbase-Init service config
@@ -24,8 +22,7 @@ both Linux (cloud-init) and Windows (Cloudbase-Init + Sysprep).
 
 ## 2. Linux on KVM (libvirt)
 
-The cleanest path is `virt-install` / `virsh` injecting `user-data` + `meta-data`
-directly (no ISO):
+The cleanest path is `virt-install` / `virsh` injecting `user-data` + `meta-data` directly (no ISO):
 
 ```bash
 virt-install \
@@ -36,8 +33,7 @@ virt-install \
   --cloud-init user-data=./out/user-data,meta-data=./out/meta-data
 ```
 
-Or for an existing domain, copy into the image's cloud-init drop-in before first
-boot (golden-image approach):
+Or for an existing domain, copy into the image's cloud-init drop-in before first boot (golden-image approach):
 
 ```bash
 sudo install -D -m 0600 out/user-data /etc/cloud/cloud.cfg.d/99-cloudseed.cfg
@@ -54,8 +50,8 @@ Verify after boot: `sudo cloud-init status --long`.
 vSphere reads cloud-init via **guestinfo** (vApp properties) — no CD-ROM needed.
 
 ### Option A: vApp guestinfo (recommended)
-Set these extra config keys on the VM (via `govc`, PowerCLI, or the UI
-"VM Options → Advanced → Configuration Parameters"):
+
+Set these extra config keys on the VM (via `govc`, PowerCLI, or the UI "VM Options → Advanced → Configuration Parameters"):
 
 | Key | Value |
 |-----|-------|
@@ -73,6 +69,7 @@ govc vm.change -vm web01 \
 ```
 
 ### Option B: golden image drop-in
+
 On the template VM before conversion to template:
 
 ```bash
@@ -86,41 +83,33 @@ sudo shutdown -h now
 
 ## 4. Windows — Cloudbase-Init
 
-Install [Cloudbase-Init](https://cloudbase.it/cloudbase-init/) on the golden
-image. Then place the generated configs:
+Install [Cloudbase-Init](https://cloudbase.it/cloudbase-init/) on the golden image. Then place the generated configs:
 
 ```
 C:\Program Files\Cloudbase Solutions\Cloudbase-Init\conf\cloudbase-init.conf
 C:\Program Files\Cloudbase Solutions\Cloudbase-Init\conf\cloudbase-init-unattend.conf
 ```
 
-Cloudbase-Init pulls `user-data`/`meta-data` from a **config drive** (attached
-ISO/VMDK) or, on vSphere, from guestinfo the same way as Linux. The user, SSH
-keys, hostname, NTP and first-boot scripts are applied on first boot.
+Cloudbase-Init pulls `user-data`/`meta-data` from a **config drive** (attached ISO/VMDK) or, on vSphere, from guestinfo the same way as Linux. The user, SSH keys, hostname, NTP and first-boot scripts are applied on first boot.
 
-> SSH on Windows requires the OpenSSH Server feature + Cloudbase-Init's
-> `SetUserSSHPublicKeysPlugin` (already enabled in the generated conf).
+> SSH on Windows requires the OpenSSH Server feature + Cloudbase-Init's `SetUserSSHPublicKeysPlugin` (already enabled in the generated conf).
 
 ### Windows static IP (no config drive)
 
-When `net_mode` is `static`, CloudSeed emits `netsh` commands as a first-boot
-script so the IP is applied even without a config drive:
+When `net_mode` is `static`, CloudSeed emits `netsh` commands as a first-boot script so the IP is applied even without a config drive:
 
 ```bat
 netsh interface ip set address "Ethernet" static 192.168.1.60 255.255.255.0 192.168.1.1
 netsh interface ip add dns "Ethernet" 8.8.8.8 index=1
 ```
 
-These run on first boot via Cloudbase-Init. DHCP is used when `net_mode`
-is `dhcp` (the default).
+These run on first boot via Cloudbase-Init. DHCP is used when `net_mode` is `dhcp` (the default).
 
 ---
 
 ## 5. Windows — Sysprep (CRITICAL: new SID)
 
-**Never clone a Windows VM without generalizing it.** Duplicated SIDs break
-domain join, GPO, WSUS, and file/registry ACLs. CloudSeed emits a ready
-Sysprep answer file.
+**Never clone a Windows VM without generalizing it.** Duplicated SIDs break domain join, GPO, WSUS, and file/registry ACLs. CloudSeed emits a ready Sysprep answer file.
 
 1. On the prepared golden VM (Cloudbase-Init already installed + `.conf` files placed):
 2. Copy `sysprep-unattend.xml` and `run-sysprep.bat` into the same folder.
@@ -131,22 +120,89 @@ run-sysprep.bat
 ```
 
 This runs:
+
 ```
 C:\Windows\System32\sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:sysprep-unattend.xml
 ```
 
-The VM **shuts down**. It now has a pending generalize — the **next power-on**
-creates a fresh computer SID, new hostname (`WIN-*` random), resets the
-activation grace, and runs Cloudbase-Init to apply CloudSeed config.
+The VM **shuts down**. It now has a pending generalize — the **next power-on** creates a fresh computer SID, new hostname (`WIN-*` random), resets the activation grace, and runs Cloudbase-Init to apply CloudSeed config.
 
 4. Now convert to template / clone. Every clone gets a unique SID.
 
-> If you skip Sysprep and just clone, you will have duplicate SIDs — fix with
-> `sysprep /generalize` (or `New-SID` tooling) before joining any domain.
+> If you skip Sysprep and just clone, you will have duplicate SIDs — fix with `sysprep /generalize` (or `New-SID` tooling) before joining any domain.
 
 ---
 
-## 6. Re-using a config
+## 6. Module-specific application notes
+
+### Network (static) — Linux
+
+The generated `user-data` includes `network: {version: 2, ethernets: {eth0: {...}}}` — cloud-init applies this on first boot. Ensure the interface name (`eth0`, `ens192`, etc.) matches your target image.
+
+### Network (static) — Windows
+
+First-boot script runs `netsh` commands. If interface name differs from "Ethernet", edit `run-sysprep.bat` or the generated `firstboot` commands before sealing.
+
+### Disk grow (growpart) — Linux
+
+Requires `growpart` package on the target image (usually pre-installed on cloud images). CloudSeed configures `growpart: {mode: auto, devices: ["/dev/sda1"]}`. Verify device/partition matches your image.
+
+### Packages — Linux
+
+`package_upgrade: true` runs `apt upgrade` / `dnf upgrade` on first boot. List additional packages in `packages: ["nginx", "docker.io"]`.
+
+### NTP — Linux + Windows
+
+Linux: `ntp: {servers: ["pool.ntp.org"]}` configures systemd-timesyncd / chrony.
+Windows: Cloudbase-Init `SetNtpClientPlugin` applies the same servers.
+
+### Write files — Linux + Windows
+
+Arbitrary files written to target. Linux uses `write_files:` in cloud-config. Windows uses Cloudbase-Init `LocalScriptsPlugin` — files placed in `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\LocalScripts\`.
+
+### First-boot commands — Linux + Windows
+
+Linux: `runcmd:` in cloud-config. Windows: `LocalScriptsPlugin` runs `.bat`/`.ps1` from LocalScripts folder.
+
+---
+
+## 7. Detect cloud-init version on target
+
+Run on your golden image or running VM:
+
+```bash
+cloud-init --version
+```
+
+CloudSeed also provides:
+
+```bash
+cloudseed --detect-cloud-init
+```
+
+This checks the local system and prints compatibility table.
+
+---
+
+## 8. Write directly to cloud-init config path (Linux)
+
+For immediate testing on a running Linux VM:
+
+```bash
+cloudseed --write-to-cloud-init-path --json config.json
+```
+
+This writes `user-data` to `/etc/cloud/cloud.cfg.d/99-cloudseed.cfg` (requires root). Then:
+
+```bash
+sudo cloud-init clean --reboot
+```
+
+⚠️ **Warning:** This modifies the running system. Use on test VMs only.
+
+---
+
+## 9. Re-using a config
 
 `cloudseed.json` is the full config. Re-apply without the menu:
 
@@ -156,7 +212,7 @@ cloudseed --json out/cloudseed.json --out out2
 
 ---
 
-## 7. Portable binary
+## 10. Portable binary
 
 Build a single-file executable (no Python install needed on target):
 
@@ -167,3 +223,52 @@ python build_dist.py
 ```
 
 The binary is fully self-contained and runs the same menu on Windows and Linux.
+
+---
+
+## 11. Complete workflow: Create a template VM (Linux)
+
+```bash
+# 1. Generate config
+cloudseed
+# ... select KVM, Linux, modules, output to ./cloudseed-out
+
+# 2. Create VM from cloud image
+virt-install \
+  --name ubuntu-template \
+  --memory 4096 --vcpus 2 \
+  --disk size=30,bus=virtio \
+  --os-variant ubuntu22.04 \
+  --cloud-init user-data=./cloudseed-out/user-data,meta-data=./cloudseed-out/meta-data
+
+# 3. Wait for first boot, verify
+ssh admin@<vm-ip> "cloud-init status --long"
+
+# 4. Clean for template
+ssh admin@<vm-ip> "sudo cloud-init clean --machine-id && sudo shutdown -h now"
+
+# 5. Convert to template (virsh, virt-manager, or vSphere)
+```
+
+---
+
+## 12. Complete workflow: Create a template VM (Windows)
+
+```bash
+# 1. Generate config
+cloudseed
+# ... select vSphere, Windows, modules (include sysprep), output to ./cloudseed-out
+
+# 2. Install Windows + Cloudbase-Init on a VM
+
+# 3. Copy generated files:
+#    cloudbase-init.conf, cloudbase-init-unattend.conf → C:\Program Files\Cloudbase Solutions\Cloudbase-Init\conf\
+#    sysprep-unattend.xml, run-sysprep.bat → C:\Temp\ (or any folder)
+
+# 4. Run as Administrator:
+#    C:\Temp\run-sysprep.bat
+
+# 5. VM shuts down. Convert to template in vSphere.
+
+# 6. Deploy from template — each clone gets unique SID + CloudSeed config
+```
