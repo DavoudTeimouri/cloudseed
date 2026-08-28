@@ -4,12 +4,115 @@ from __future__ import annotations
 
 import os
 import json
-import yaml
 import sys
+import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 from .model import TemplateConfig, print_section, print_info, print_warn, print_error, print_success, check_shutdown, colorize, Colors
+
+
+def _safe_load_yaml(content: str) -> Any:
+    """Minimal YAML parser for cloud-config subset (stdlib only)."""
+    # Remove comments and blank lines
+    lines = []
+    for line in content.split('\n'):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        # Remove inline comments
+        if '#' in line:
+            line = line.split('#')[0].rstrip()
+        if line:
+            lines.append(line)
+    
+    content = '\n'.join(lines)
+    if not content:
+        return {}
+    
+    # Simple parser for common cloud-config structures
+    # Handles: key: value, key:, - item, nested dicts with 2-space indent
+    def parse_value(v: str) -> Any:
+        v = v.strip()
+        if v.lower() in ('true', 'false'):
+            return v.lower() == 'true'
+        if v.lower() == 'null' or v == '~':
+            return None
+        # Number
+        try:
+            if '.' in v:
+                return float(v)
+            return int(v)
+        except ValueError:
+            pass
+        # String (remove quotes)
+        if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+            return v[1:-1]
+        return v
+    
+    def parse_mapping(lines: List[str], start: int, base_indent: int) -> tuple[Dict[str, Any], int]:
+        result = {}
+        i = start
+        while i < len(lines):
+            line = lines[i]
+            indent = len(line) - len(line.lstrip())
+            if indent < base_indent:
+                break
+            if indent > base_indent:
+                # Should not happen in well-formed YAML
+                i += 1
+                continue
+            
+            stripped = line.strip()
+            if stripped.startswith('- '):
+                # List item - should be handled by caller
+                break
+            
+            if ':' not in stripped:
+                i += 1
+                continue
+            
+            key, val = stripped.split(':', 1)
+            key = key.strip()
+            val = val.strip()
+            
+            if not val:
+                # Could be nested mapping or list
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    next_indent = len(next_line) - len(next_line.lstrip())
+                    if next_indent > indent:
+                        if next_line.strip().startswith('- '):
+                            # List
+                            items = []
+                            j = i + 1
+                            while j < len(lines):
+                                lj = lines[j]
+                                lj_indent = len(lj) - len(lj.lstrip())
+                                if lj_indent < next_indent:
+                                    break
+                                if lj_indent == next_indent and lj.strip().startswith('- '):
+                                    item_content = lj.strip()[2:].strip()
+                                    items.append(parse_value(item_content))
+                                j += 1
+                            result[key] = items
+                            i = j
+                            continue
+                        else:
+                            # Nested mapping
+                            nested, new_i = parse_mapping(lines, i + 1, next_indent)
+                            result[key] = nested
+                            i = new_i
+                            continue
+                result[key] = None
+            else:
+                result[key] = parse_value(val)
+            i += 1
+        return result, i
+    
+    all_lines = content.split('\n')
+    result, _ = parse_mapping(all_lines, 0, 0)
+    return result
 
 
 def validate_no_persistent_runs(config_dir: str) -> List[str]:
@@ -36,11 +139,11 @@ def validate_no_persistent_runs(config_dir: str) -> List[str]:
                 yaml_content = content[len("#cloud-config"):].strip()
                 if yaml_content:
                     try:
-                        data = yaml.safe_load(yaml_content)
+                        data = _safe_load_yaml(yaml_content)
                         if data:
                             warnings.extend(_check_user_data(data))
-                    except yaml.YAMLError as e:
-                        warnings.append(f"user-data: YAML parse error: {e}")
+                    except Exception as e:
+                        warnings.append(f"user-data: parse error: {e}")
         except Exception as e:
             warnings.append(f"user-data: read error: {e}")
     

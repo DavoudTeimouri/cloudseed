@@ -5,6 +5,32 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-28
+
+### Added
+- **Stdlib-only YAML parser** in validator (`_safe_load_yaml`) — eliminates `pyyaml` dependency; Config Validator now works in PyInstaller binary without external modules.
+- **Platform-aware module filtering** — vSphere-only modules (`vsphere_spec`, `vsphere_scripts`) only appear when platform = vSphere; hidden for KVM/Physical.
+- **Template Maker: detailed options menu** (option 5) — shows sub-items for each OS (Linux: cloud-init clean, machine-id, SSH keys, logs; Windows: Sysprep generalize, OOBE, shutdown) with per-platform warnings.
+- **Template Maker: physical machine support with acceptance** — physical hardware now allowed with explicit warnings and user confirmation ("at your own risk"); no longer hard-blocked.
+- **Template Maker: Sysprep on physical with acceptance** — Windows physical machine can run Sysprep generalize with detailed warnings (new SID, OOBE, driver redetection, local admin requirement).
+- **Guide Help menu** — new main menu option showing configuration reference with all modules, sub-items, defaults, and platform applicability.
+- **Priority-based module selection** — when "Let Platform Handle X" modules selected, conflicting cloud-init modules auto-unselected (higher priority to platform modules).
+- **Cloud-Init Doctor: no external deps** — all diagnosis commands use stdlib subprocess; no `pyyaml` or other dependencies.
+
+### Changed
+- **Config Validator** — replaced `yaml.safe_load` with custom `_safe_load_yaml` (stdlib only); handles cloud-config subset: mappings, lists, scalars, nested dicts.
+- **Template Maker flow** — options 1-4 now allow physical machine with confirmation; option 5 shows detailed sub-configuration before execution.
+- **Module defaults** — platform modules (`platform_hostname`, `platform_network`, `platform_ntp`) now default ON; cloud-init equivalents default OFF when platform module selected.
+- **Version bump** — 1.3.0 → 1.4.0 across `__init__.py`, `pyproject.toml`, `version.txt`.
+
+### Fixed
+- **Config Validator crash** — `ModuleNotFoundError: No module named 'yaml'` in PyInstaller binary fixed by removing PyYAML dependency.
+- **vSphere modules on non-vSphere** — `vsphere_spec` and `vsphere_scripts` no longer appear for KVM/Physical platforms.
+- **Empty user-data** — module configuration now properly populates config fields; generated user-data contains selected modules.
+- **EOFError handling** — `_ask`, `_ask_list`, `_ask_bool` guard against EOF in piped/automated runs (return defaults).
+- **Template Maker physical block** — removed hard error; replaced with explicit acceptance prompts with detailed risk warnings.
+- **Sysprep on physical** — now allowed with acceptance; previously blocked entirely.
+
 ## [1.3.0] - 2026-08-28
 
 ### Added

@@ -265,8 +265,8 @@ def template_maker_menu() -> int:
         
         if is_physical:
             print_warn("This appears to be a PHYSICAL machine!")
-            print_warn("Template Maker is for VIRTUAL MACHINES only.")
-            print_warn("Converting a physical machine to a template is not supported.")
+            print_warn("Template Maker is designed for VIRTUAL MACHINES.")
+            print_warn("Running on physical hardware is AT YOUR OWN RISK.")
             print()
         
         if os_type == "unknown":
@@ -278,10 +278,11 @@ def template_maker_menu() -> int:
             print_warn("Template preparation requires elevated privileges.")
             print()
         
-        print(f"  {colorize('1', Colors.CYAN)}) Prepare Linux template (clean cloud-init, remove SSH keys)")
+        print(f"  {colorize('1', Colors.CYAN)}) Prepare Linux template (clean cloud-init, remove SSH keys, machine-id)")
         print(f"  {colorize('2', Colors.CYAN)}) Prepare Windows template (run Sysprep generalize + shutdown)")
         print(f"  {colorize('3', Colors.CYAN)}) Remove CloudSeed from this machine")
         print(f"  {colorize('4', Colors.CYAN)}) Full template preparation (OS-specific + remove CloudSeed + poweroff)")
+        print(f"  {colorize('5', Colors.CYAN)}) Configure template options (detailed sub-items)")
         print(f"  {colorize('0', Colors.GRAY)}) ← Back to Main Menu")
         print()
         
@@ -292,7 +293,10 @@ def template_maker_menu() -> int:
             if os_type != "linux":
                 print_error("This option is for Linux only.")
             elif is_physical:
-                print_error("Cannot prepare physical machine as template.")
+                if not _ask_bool("WARNING: This is a PHYSICAL machine. Cleaning cloud-init/SSH keys may break the running system. Continue at your own risk?"):
+                    print_info("Cancelled.")
+                else:
+                    clean_cloud_init()
             elif not is_admin:
                 print_error("Requires root privileges. Run with sudo.")
             else:
@@ -305,7 +309,10 @@ def template_maker_menu() -> int:
             if os_type != "windows":
                 print_error("This option is for Windows only.")
             elif is_physical:
-                print_error("Cannot prepare physical machine as template.")
+                if not _ask_bool("WARNING: This is a PHYSICAL machine. Running Sysprep generalize will RESET this machine (new SID, OOBE, shutdown). Continue at your own risk?"):
+                    print_info("Cancelled.")
+                else:
+                    clean_windows_for_template()
             elif not is_admin:
                 print_error("Requires Administrator privileges. Run as Administrator.")
             else:
@@ -322,9 +329,10 @@ def template_maker_menu() -> int:
         
         elif choice == "4":
             if is_physical:
-                print_error("Cannot prepare physical machine as template.")
-                input("\nPress Enter to continue...")
-                continue
+                if not _ask_bool("WARNING: This is a PHYSICAL machine. Full preparation will clean OS state, remove CloudSeed, and POWEROFF. Continue at your own risk?"):
+                    print_info("Cancelled.")
+                    input("\nPress Enter to continue...")
+                    continue
             
             if not is_admin:
                 print_error("Requires root/Administrator privileges.")
@@ -369,11 +377,62 @@ def template_maker_menu() -> int:
             
             input("\nPress Enter to continue...")
         
+        elif choice == "5":
+            _configure_template_options(os_type, is_physical, is_admin)
+            input("\nPress Enter to continue...")
+        
         elif choice == "0":
             return 0
         
         else:
             print_error("Invalid selection.")
+
+
+def _configure_template_options(os_type: str, is_physical: bool, is_admin: bool) -> None:
+    """Configure detailed template options."""
+    print_section("Template Options", f"Detailed configuration for {os_type.upper()} template preparation")
+    print()
+    
+    if os_type == "linux":
+        print_info("Linux template preparation will:")
+        print("  - Run 'cloud-init clean --machine-id' (removes instance data)")
+        print("  - Remove /etc/machine-id and /var/lib/dbus/machine-id")
+        print("  - Remove /var/lib/cloud/instance* (cloud-init instance data)")
+        print("  - Remove ALL /etc/ssh/ssh_host_* keys (regenerated on first boot)")
+        print("  - Clear /tmp and /var/tmp")
+        print("  - Truncate /var/log/* logs")
+        print()
+        if is_physical:
+            print_warn("On PHYSICAL machine: SSH keys removal will break existing SSH connections!")
+            print_warn("Machine-id removal may affect services that depend on stable machine-id.")
+            if not _ask_bool("Continue with physical machine cleanup?"):
+                return
+        if not is_admin:
+            print_error("Requires root privileges. Run with sudo.")
+            return
+            
+    elif os_type == "windows":
+        print_info("Windows template preparation will:")
+        print("  - Locate sysprep-unattend.xml (checks standard paths)")
+        print("  - Run 'sysprep.exe /generalize /oobe /shutdown /unattend:<file>'")
+        print("  - Machine will SHUTDOWN with generalized state")
+        print("  - Next boot: new Machine SID, OOBE, device redetection")
+        print()
+        if is_physical:
+            print_warn("On PHYSICAL machine: Sysprep will RESET this Windows installation!")
+            print_warn("- New Machine SID generated")
+            print_warn("- All device drivers re-detected")
+            print_warn("- Machine goes through OOBE (Out-of-Box Experience)")
+            print_warn("- MUST have local admin account to log in after reboot")
+            if not _ask_bool("Continue with physical machine Sysprep?"):
+                return
+        if not is_admin:
+            print_error("Requires Administrator privileges. Run as Administrator.")
+            return
+    
+    print()
+    print_info("Use options 1-4 to execute the preparation.")
+    print_info("Option 4 = Full preparation + CloudSeed removal + Poweroff")
 
 
 if __name__ == "__main__":

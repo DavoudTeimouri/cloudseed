@@ -345,6 +345,7 @@ def collect_interactive() -> TemplateConfig:
             "Config Validator",
             "Cloud-Init Doctor",
             "Template Maker (Prepare Current Machine as Template)",
+            "Guide Help (Configuration Reference)",
             "Exit",
         ]
         action = _choose("Select action:", main_actions)
@@ -364,6 +365,10 @@ def collect_interactive() -> TemplateConfig:
         elif action == "Template Maker (Prepare Current Machine as Template)":
             from .templatemaker import template_maker_menu
             template_maker_menu()
+            continue
+        elif action == "Guide Help (Configuration Reference)":
+            from .model import show_guide_help
+            show_guide_help()
             continue
         elif action == "Exit":
             print("Goodbye!")
@@ -386,25 +391,48 @@ def collect_interactive() -> TemplateConfig:
             cfg.os_type = os_choice.split()[0].lower()
             
             # Module selection with back
-            available = [(mid, lbl) for (mid, lbl, oses) in MODULES if cfg.os_type in oses]
+            available = [(mid, lbl) for (mid, lbl, oses) in MODULES if cfg.os_type in oses and (mid not in ("vsphere_spec", "vsphere_scripts") or cfg.platform == "vsphere")]
             
             # Warn if cloud-init not available but Linux selected
             if cfg.os_type == "linux" and not cloud_init_available:
-                print(f"\n⚠️  WARNING: cloud-init not found on this system!")
+                print(f"\n{colorize('WARNING', Colors.YELLOW)}: cloud-init not found on this system!")
                 print("  Generated configs require cloud-init on the TARGET VM, not this build machine.")
                 print("  This is OK if you're building configs for another VM.")
                 print("  Some features (Config Validator, Cloud-Init Doctor) need cloud-init locally.")
                 print()
             
-            module_options = [lbl for (mid, lbl) in available]
+            # Default platform modules ON, cloud-init equivalents OFF when platform module selected
             module_ids = [mid for (mid, lbl) in available]
-            defaults = module_ids  # all recommended by default
+            defaults = []
+            for mid in module_ids:
+                if mid in ("platform_hostname", "platform_network", "platform_ntp"):
+                    defaults.append(mid)  # Platform modules default ON
+                elif mid in ("hostname", "network", "ntp"):
+                    # Cloud-init equivalents default OFF (platform modules have priority)
+                    pass
+                else:
+                    defaults.append(mid)  # Other modules default ON
+            
+            module_options = [lbl for (mid, lbl) in available]
             
             while True:
                 selected_modules = _choose_module("Module Selection", module_options, defaults)
                 if selected_modules == "BACK":
                     break  # Back to OS selection
-                cfg.modules = selected_modules
+                
+                # Handle platform module priority: when platform module selected, unselect cloud-init equivalent
+                final_modules = list(selected_modules)
+                if "platform_hostname" in selected_modules and "hostname" in selected_modules:
+                    final_modules.remove("hostname")
+                    print_info("Platform Hostname selected -> Hostname module auto-disabled (platform has priority)")
+                if "platform_network" in selected_modules and "network" in selected_modules:
+                    final_modules.remove("network")
+                    print_info("Platform Network selected -> Network module auto-disabled (platform has priority)")
+                if "platform_ntp" in selected_modules and "ntp" in selected_modules:
+                    final_modules.remove("ntp")
+                    print_info("Platform NTP selected -> NTP module auto-disabled (platform has priority)")
+                
+                cfg.modules = final_modules
                 
                 # Now configure each module
                 if _configure_modules(cfg, available):
@@ -633,6 +661,114 @@ def _configure_vsphere_scripts(cfg: TemplateConfig) -> bool:
         print("# Example: Join domain, run compliance checks, etc.")
         cfg.vsphere_post_script = _ask("Post-customization script (blank to skip)", "")
     return True
+
+
+def show_guide_help() -> None:
+    """Show configuration reference guide with all modules, sub-items, defaults, and platform applicability."""
+    print_section("Guide Help: Configuration Reference", "All CloudSeed modules, sub-items, defaults, and platform/OS applicability")
+    print()
+    
+    print_info("Platform Modules (priority: platform > cloud-init)")
+    print(f"  {colorize('platform_hostname', Colors.CYAN):<25} Let Platform Set Hostname (vSphere/KVM)")
+    print(f"    Default: ON  |  OS: Linux, Windows  |  Platforms: vSphere, KVM")
+    print(f"    When ON: hostname/hostname_prefix ignored, platform assigns hostname")
+    print()
+    print(f"  {colorize('platform_network', Colors.CYAN):<25} Let Platform Handle Network")
+    print(f"    Default: ON  |  OS: Linux, Windows  |  Platforms: vSphere, KVM")
+    print(f"    When ON: network/net_mode/net_* ignored, platform configures network")
+    print()
+    print(f"  {colorize('platform_ntp', Colors.CYAN):<25} Let Platform Handle NTP")
+    print(f"    Default: ON  |  OS: Linux, Windows  |  Platforms: vSphere, KVM")
+    print(f"    When ON: ntp/ntp_servers ignored, platform configures NTP")
+    print()
+    
+    print_info("Core Modules (Linux)")
+    print(f"  {colorize('hostname', Colors.CYAN):<25} Set Hostname")
+    print(f"    Sub-items: hostname_prefix (default: 'vm'), hostname (default: auto)")
+    print(f"    OS: Linux, Windows  |  Ignored if platform_hostname=ON")
+    print()
+    print(f"  {colorize('users', Colors.CYAN):<25} Create Admin User")
+    print(f"    Sub-items: username (default: 'admin'), password (default: 'ChangeMe!123'), sudo (default: true), lock_password (default: false), ssh_pwauth (default: false)")
+    print(f"    OS: Linux, Windows  |  Password hashed by default ($6$ SHA-512)")
+    print()
+    print(f"  {colorize('ssh', Colors.CYAN):<25} SSH Authorized Keys")
+    print(f"    Sub-items: ssh_keys (list of ssh-rsa/ssh-ed25519 keys)")
+    print(f"    OS: Linux, Windows")
+    print()
+    print(f"  {colorize('root', Colors.CYAN):<25} Harden Root")
+    print(f"    Sub-items: disable_root (default: true)")
+    print(f"    OS: Linux only")
+    print()
+    print(f"  {colorize('network', Colors.CYAN):<25} Network Configuration")
+    print(f"    Sub-items: net_mode (default: 'dhcp' | 'static'), net_interface (default: 'eth0'), net_address, net_netmask, net_gateway, net_dns (default: ['8.8.8.8','1.1.1.1']), net_search")
+    print(f"    OS: Linux, Windows  |  Ignored if platform_network=ON")
+    print()
+    print(f"  {colorize('packages', Colors.CYAN):<25} Install Packages")
+    print(f"    Sub-items: package_upgrade (default: true), packages (list)")
+    print(f"    OS: Linux only")
+    print()
+    print(f"  {colorize('locale', Colors.CYAN):<25} Locale & Timezone")
+    print(f"    Sub-items: timezone (default: 'UTC'), locale (default: 'en_US.UTF-8'), keyboard_layout (default: 'us')")
+    print(f"    OS: Linux only")
+    print()
+    print(f"  {colorize('disk', Colors.CYAN):<25} Grow Root Filesystem")
+    print(f"    Sub-items: grow_device (default: '/dev/sda'), grow_partition (default: '1')")
+    print(f"    OS: Linux only")
+    print()
+    print(f"  {colorize('ntp', Colors.CYAN):<25} NTP Time Servers")
+    print(f"    Sub-items: ntp_servers (default: ['pool.ntp.org'])")
+    print(f"    OS: Linux, Windows  |  Ignored if platform_ntp=ON")
+    print()
+    print(f"  {colorize('files', Colors.CYAN):<25} Write Arbitrary Files")
+    print(f"    Sub-items: path, content, permissions (default: '0644'), owner (default: 'root:root')")
+    print(f"    OS: Linux, Windows")
+    print()
+    print(f"  {colorize('bootcmd', Colors.CYAN):<25} Early Boot Commands")
+    print(f"    Sub-items: list of commands (run every boot, early)")
+    print(f"    OS: Linux only")
+    print()
+    print(f"  {colorize('firstboot', Colors.CYAN):<25} First-Boot Commands")
+    print(f"    Sub-items: list of commands (run once on first boot via runcmd)")
+    print(f"    OS: Linux, Windows")
+    print()
+    print(f"  {colorize('final', Colors.CYAN):<25} Final Message")
+    print(f"    Sub-items: final_message (default: 'CloudSeed: system ready.')")
+    print(f"    OS: Linux only")
+    print()
+    
+    print_info("Windows Modules")
+    print(f"  {colorize('sysprep', Colors.CYAN):<25} Windows Sysprep Generalize")
+    print(f"    Sub-items: sysprep (default: true), sysprep_unattended (default: true), sysprep_organization, sysprep_owner, sysprep_computer_prefix (default: 'WIN'), sysprep_timezone, sysprep_locale, sysprep_product_key")
+    print(f"    OS: Windows only  |  Runs sysprep /generalize /oobe /shutdown /unattend:...")
+    print()
+    
+    print_info("vSphere Modules (only on vSphere platform)")
+    print(f"  {colorize('vsphere_spec', Colors.CYAN):<25} Export vSphere Customization Spec (XML)")
+    print(f"    Sub-items: export_vsphere_spec (default: false), vsphere_spec_name (default: 'CloudSeed-Spec')")
+    print(f"    OS: Linux, Windows  |  Platform: vSphere only")
+    print()
+    print(f"  {colorize('vsphere_scripts', Colors.CYAN):<25} vSphere Pre/Post Scripts")
+    print(f"    Sub-items: use_sample_scripts (default: false), vsphere_pre_script, vsphere_post_script")
+    print(f"    OS: Linux, Windows  |  Platform: vSphere only")
+    print()
+    
+    print_info("Global Settings")
+    print(f"  Platform: vsphere | kvm | physical")
+    print(f"  OS Type: linux | windows")
+    print(f"  Output Dir: ./cloudseed-out (in current working directory)")
+    print(f"  Password Hashing: $6$ SHA-512 (default), --plaintext-password to disable")
+    print(f"  Config File: cloudseed.json (written alongside output for re-use)")
+    print()
+    
+    print_info("Priority Rules")
+    print("  - platform_hostname ON -> hostname module ignored")
+    print("  - platform_network ON -> network module ignored")
+    print("  - platform_ntp ON -> ntp module ignored")
+    print("  - vSphere modules only appear when platform = vSphere")
+    print("  - Linux modules hidden on Windows, Windows modules hidden on Linux")
+    print()
+    
+    input(f"  {colorize('Press Enter to return to Main Menu', Colors.BOLD)}")
 
 
 def load_json(path: str) -> TemplateConfig:
