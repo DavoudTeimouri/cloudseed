@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import sys
 import subprocess
 from typing import List
 
 from . import __version__
-from .model import collect_interactive, load_json, TemplateConfig
+from .model import collect_interactive, load_json, TemplateConfig, setup_signal_handlers
 from .generate import generate_all, build_user_data, build_meta_data
+
+
+def print_banner(title: str = "Main Menu") -> None:
+    """Print CloudSeed banner on all menus."""
+    print("\n" + "=" * 60)
+    print(f"  CloudSeed {__version__}")
+    print("  cloud-init / Cloudbase-Init VM Template Generator")
+    print(f"  {title}")
+    print("=" * 60 + "\n")
 
 
 def _print_generated(written: List[str]) -> None:
@@ -131,7 +141,7 @@ def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
             return 1
         return 0 if write_to_cloud_init_path(cfg) else 1
     
-    written = generate_all(cfg, out_dir)
+    written = generate_all(cfg, out_dir, interactive=False)
     _print_generated(written)
     
     if print_output:
@@ -144,9 +154,17 @@ def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
 
 def run_interactive(out_dir: str, plaintext: bool = False, 
                     write_cloud_init_path: bool = False) -> int:
-    print("cloudseed — cloud-init VM template generator")
-    print("=" * 48)
-    cfg = collect_interactive()
+    # Setup signal handlers for graceful shutdown
+    setup_signal_handlers()
+    
+    print_banner("Welcome")
+    result = collect_interactive()
+    
+    # If collect_interactive returns an int (from submenu), return it
+    if isinstance(result, int):
+        return result
+    
+    cfg = result
     cfg.plaintext_password = plaintext
 
     # Default output directory in current path
@@ -156,20 +174,20 @@ def run_interactive(out_dir: str, plaintext: bool = False,
 
     warnings = validate_config(cfg)
     _print_warnings(warnings)
-    
+
     if write_cloud_init_path:
         if cfg.os_type != "linux":
             print("Error: --write-to-cloud-init-path only works for Linux configs")
             return 1
         return 0 if write_to_cloud_init_path(cfg) else 1
-    
+
     # Ask if user wants to write to cloud-init path (Linux only)
     if cfg.os_type == "linux" and not write_cloud_init_path:
         write_direct = input("\nWrite user-data directly to /etc/cloud/cloud.cfg.d/99-cloudseed.cfg? (requires sudo) [y/N]: ").strip().lower()
         if write_direct in ("y", "yes"):
             return 0 if write_to_cloud_init_path(cfg) else 1
 
-    written = generate_all(cfg, out_dir)
+    written = generate_all(cfg, out_dir, interactive=True)
     _print_generated(written)
 
     print("--- user-data preview ---")

@@ -607,9 +607,10 @@ def build_readme(cfg: TemplateConfig, warnings: List[str] = None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def generate_all(cfg: TemplateConfig, out_dir: str) -> List[str]:
+def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) -> List[str]:
     import json as _json
     from .cli import validate_config
+    from .model import _get_unique_path
     os.makedirs(out_dir, exist_ok=True)
     written: List[str] = []
 
@@ -619,10 +620,14 @@ def generate_all(cfg: TemplateConfig, out_dir: str) -> List[str]:
     def w(name: str, content: str) -> None:
         if content == "":
             return
-        path = os.path.join(out_dir, name)
-        with open(path, "w", encoding="utf-8") as fh:
+        # Get unique path (handles overwrite/suffix/skip)
+        unique_path = _get_unique_path(out_dir, name)
+        if unique_path is None:
+            # User chose to skip
+            return
+        with open(unique_path, "w", encoding="utf-8") as fh:
             fh.write(content)
-        written.append(path)
+        written.append(unique_path)
 
     w("user-data", build_user_data(cfg))
     w("meta-data", build_meta_data(cfg))
