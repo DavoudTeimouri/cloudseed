@@ -5,6 +5,24 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-28
+
+### Added
+- **Interactive module selection with toggle** — new multi-select menu (`_choose_module_multi`) where users toggle modules on/off by number, press `c` to configure selected, `a` for all, `n` for none, `0` to go back. Replaces single-pass selection.
+- **Per-module configuration flow** — after pressing `c`, each selected module is configured one-by-one with its own sub-menu (hostname, users, ssh, network, packages, locale, disk, ntp, files, bootcmd, firstboot, final, sysprep, vsphere_spec, vsphere_scripts). Unselected modules use defaults.
+- **Unified platform module list** — all three platform modules (`platform_hostname`, `platform_network`, `platform_ntp`) now appear together in module list for all platforms; no platform-specific filtering.
+- **Real-time priority conflict resolution** — when toggling a platform module (e.g., `platform_hostname`), its cloud-init equivalent (`hostname`) is auto-disabled with info message; vice versa when selecting cloud-init module. Prevents conflicts at selection time.
+
+### Changed
+- **Module selection UX** — from single checklist to persistent toggle menu with immediate visual feedback (green ✓ markers). User sees all options, selects subset, then configures.
+- **Platform modules always visible** — `platform_hostname`, `platform_network`, `platform_ntp` shown for vSphere, KVM, and Physical/Other platforms (previously only vSphere/KVM).
+- **Defaults** — platform modules default ON; cloud-init equivalents (`hostname`, `network`, `ntp`) default OFF but user can explicitly enable them (auto-disables platform module).
+- **Version bump** — 1.4.0 → 1.5.0 across `__init__.py`, `pyproject.toml`, `version.txt`.
+
+### Fixed
+- **Empty user-data when skipping module config** — previously if user accepted all defaults without per-module config, user-data was empty. Now all selected modules are configured sequentially with defaults applied.
+- **Module configuration order** — each selected module's `_configure_*()` runs in defined order; user can go back from any sub-menu to module selection.
+
 ## [1.4.0] - 2026-08-28
 
 ### Added

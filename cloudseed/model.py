@@ -298,27 +298,69 @@ def _choose(prompt: str, options: List[str], allow_back: bool = False) -> str:
         print_error("Invalid selection, try again.")
 
 
-def _choose_module(prompt: str, options: List[str], defaults: List[str]) -> List[str]:
-    """Multi-select for modules with back option."""
+def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str]) -> List[str]:
+    """Multi-select for modules with ability to configure after selection.
+    Returns list of selected module IDs, or 'BACK' to go back.
+    """
     check_shutdown()
-    print_section(prompt, "Space-separated numbers, 'a' for all, Enter for defaults, 0 to go back")
-    for i, opt in enumerate(options, 1):
-        default_marker = f" {colorize('✓', Colors.GREEN)}" if opt in defaults else ""
-        print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{default_marker}")
-    print(f"  {colorize('0', Colors.GRAY)}) ← Back")
+    module_ids = [mid for (mid, lbl) in available]
+    module_labels = [lbl for (mid, lbl) in available]
+    selected = set(defaults)
+    
     while True:
         check_shutdown()
-        sel = input(f"\n  {colorize('Selection', Colors.BOLD)}: ").strip().lower()
+        print_section(prompt, "Space-separated numbers to toggle, 'c' to configure selected, 'a' for all, 'n' for none, '0' to go back")
+        for i, (mid, lbl) in enumerate(available, 1):
+            marker = f" {colorize('✓', Colors.GREEN)}" if mid in selected else ""
+            print(f"  {colorize(str(i), Colors.CYAN)}) {lbl}{marker}")
+        print(f"  {colorize('0', Colors.GRAY)}) ← Back")
+        print()
+        
+        sel = input(f"  {colorize('Selection', Colors.BOLD)}: ").strip().lower()
         if not sel:
-            return defaults
+            continue
         if sel == "0":
             return "BACK"
         if sel == "a":
-            return options
+            selected = set(module_ids)
+            continue
+        if sel == "n":
+            selected = set()
+            continue
+        if sel == "c":
+            if not selected:
+                print_warn("No modules selected. Select at least one module.")
+                continue
+            return list(selected)
+        
         try:
             idxs = [int(x) for x in sel.split() if x.isdigit()]
-            chosen = {options[i - 1] for i in idxs if 1 <= i <= len(options)}
-            return [m for m in defaults if m in chosen] + [m for m in chosen if m not in defaults]
+            for idx in idxs:
+                if 1 <= idx <= len(module_ids):
+                    mid = module_ids[idx - 1]
+                    if mid in selected:
+                        selected.remove(mid)
+                    else:
+                        selected.add(mid)
+                        # Handle platform module priority: auto-disable cloud-init equivalent
+                        if mid == "platform_hostname" and "hostname" in selected:
+                            selected.remove("hostname")
+                            print_info("Platform Hostname selected -> Hostname module auto-disabled (platform has priority)")
+                        elif mid == "platform_network" and "network" in selected:
+                            selected.remove("network")
+                            print_info("Platform Network selected -> Network module auto-disabled (platform has priority)")
+                        elif mid == "platform_ntp" and "ntp" in selected:
+                            selected.remove("ntp")
+                            print_info("Platform NTP selected -> NTP module auto-disabled (platform has priority)")
+                        elif mid == "hostname" and "platform_hostname" in selected:
+                            selected.remove("platform_hostname")
+                            print_info("Hostname selected -> Platform Hostname auto-disabled")
+                        elif mid == "network" and "platform_network" in selected:
+                            selected.remove("platform_network")
+                            print_info("Network selected -> Platform Network auto-disabled")
+                        elif mid == "ntp" and "platform_ntp" in selected:
+                            selected.remove("platform_ntp")
+                            print_info("NTP selected -> Platform NTP auto-disabled")
         except (ValueError, IndexError):
             print_error("Invalid selection, try again.")
 
@@ -413,28 +455,14 @@ def collect_interactive() -> TemplateConfig:
                 else:
                     defaults.append(mid)  # Other modules default ON
             
-            module_options = [lbl for (mid, lbl) in available]
-            
             while True:
-                selected_modules = _choose_module("Module Selection", module_options, defaults)
+                selected_modules = _choose_module_multi("Module Selection", available, defaults)
                 if selected_modules == "BACK":
                     break  # Back to OS selection
                 
-                # Handle platform module priority: when platform module selected, unselect cloud-init equivalent
-                final_modules = list(selected_modules)
-                if "platform_hostname" in selected_modules and "hostname" in selected_modules:
-                    final_modules.remove("hostname")
-                    print_info("Platform Hostname selected -> Hostname module auto-disabled (platform has priority)")
-                if "platform_network" in selected_modules and "network" in selected_modules:
-                    final_modules.remove("network")
-                    print_info("Platform Network selected -> Network module auto-disabled (platform has priority)")
-                if "platform_ntp" in selected_modules and "ntp" in selected_modules:
-                    final_modules.remove("ntp")
-                    print_info("Platform NTP selected -> NTP module auto-disabled (platform has priority)")
+                cfg.modules = selected_modules
                 
-                cfg.modules = final_modules
-                
-                # Now configure each module
+                # Now configure each module one by one
                 if _configure_modules(cfg, available):
                     return cfg  # Success - exit the function
                 else:

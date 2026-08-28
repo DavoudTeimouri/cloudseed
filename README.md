@@ -39,14 +39,14 @@ python -m cloudseed
 cloudseed            # or: python -m cloudseed
 ```
 
-Shows: Generate Configuration | Toolbox (External Tools) | Config Validator | Cloud-Init Doctor | Exit
+Shows: Generate Configuration | Toolbox (External Tools) | Config Validator | Cloud-Init Doctor | Template Maker | Guide Help | Exit
 
 **Generate Configuration** (interactive menu):
 1. Pick target platform: **vSphere (VMware)**, **KVM (libvirt)**, or **Physical / Other**
 2. Pick OS: **Linux** or **Windows**
-3. Multi-select cloud-init / Cloudbase-Init **modules** (all recommended by default; deselect any)
-4. For each selected module, defaults are shown — press Enter to accept or type an override
-5. Choose output directory (created in current path if not exists)
+3. **Multi-select modules** — toggle modules on/off by number (green ✓ = selected), press `c` to configure selected, `a`=all, `n`=none, `0`=back
+4. For each selected module, configure sub-items one-by-one (press Enter for defaults)
+5. Choose output directory
 6. Files generated + apply instructions printed (see GUIDE.md)
 
 **Non-interactive (batch)** — feed config as JSON:
@@ -101,9 +101,11 @@ This writes (config-only, no ISO):
 
 | Module | Linux | Windows | Description |
 |--------|:-----:|:-------:|-------------|
-| `platform_hostname` | ✅ | ✅ | Let vSphere/KVM set VM hostname (default: on) |
+| `platform_hostname` | ✅ | ✅ | Let platform (vSphere/KVM/Physical) set VM hostname (default: on) |
 | `platform_network` | ✅ | ✅ | Let platform handle network config (avoid cloud-init conflicts) |
 | `platform_ntp` | ✅ | ✅ | Let platform handle NTP (avoid cloud-init conflicts) |
+
+> **Note:** Platform modules now appear for all platforms (vSphere, KVM, Physical/Other). When a platform module is selected, its cloud-init equivalent is auto-disabled (and vice versa).
 
 ### vSphere-specific modules
 

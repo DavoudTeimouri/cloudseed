@@ -41,6 +41,8 @@ CloudSeed produces **configuration files only** — no seed ISO is built. This g
 - **Platform handles NTP** (enable "Let Platform Handle NTP"): vSphere/KVM syncs time. cloud-init skips NTP config.
 - **cloud-init handles NTP** (default): cloud-init configures systemd-timesyncd/chrony (Linux) or Cloudbase-Init NTP plugin (Windows).
 
+> **Note:** Platform modules (`platform_hostname`, `platform_network`, `platform_ntp`) are now available for **all platforms** (vSphere, KVM, Physical/Other). When a platform module is selected, its cloud-init equivalent is auto-disabled (and vice versa).
+
 > **Recommendation for vSphere**: Enable all three "Let Platform Handle..." modules for a clean separation — vSphere Guest Customization handles identity/network/time, cloud-init handles user/packages/scripts.
 
 ---
@@ -497,7 +499,7 @@ All menus display a consistent banner:
 
 ```
 ============================================================
-  CloudSeed v1.1.0
+  CloudSeed v1.5.0
   cloud-init / Cloudbase-Init VM Template Generator
   Main Menu
 ============================================================
@@ -506,14 +508,83 @@ All menus display a consistent banner:
   2) Toolbox (External Tools)
   3) Config Validator
   4) Cloud-Init Doctor
-  5) Exit
+  5) Template Maker
+  6) Guide Help (Configuration Reference)
+  7) Exit
 ```
 
 Each sub-menu shows:
-- **Title** in banner (e.g., "Module Selection", "Network Configuration")
+- **Title** in colored section header (e.g., "Module Selection", "Network Configuration")
 - **Description** of what the menu does
 - **Default values** in [brackets]
 - **Numbered options** for easy selection
+- **0) ← Back** to return to previous menu
+
+### Module Selection (Generate Configuration → Platform → OS)
+
+The module selection screen now shows **all available modules** with real-time toggle:
+
+```
+============================================================
+  CloudSeed v1.5.0
+  Module Selection (Linux / vSphere)
+============================================================
+
+Available modules (toggle by number, 'c' to configure selected, 'a'=all, 'n'=none):
+
+  [ ] 1) hostname              - Set hostname via cloud-init
+  [✓] 2) platform_hostname    - Let platform set VM hostname
+  [ ] 3) users                - Create admin user + password
+  [ ] 4) ssh                  - SSH authorized keys + password auth
+  [ ] 5) root                 - Harden root (disable root SSH login)
+  [ ] 6) network              - Network (DHCP / static IP)
+  [✓] 7) platform_network     - Let platform handle network
+  [ ] 8) packages             - Install OS packages / upgrade
+  [ ] 9) locale               - Locale + keyboard + timezone
+  [ ] 10) disk                - Grow root filesystem (growpart)
+  [ ] 11) ntp                 - NTP time servers
+  [✓] 12) platform_ntp        - Let platform handle NTP
+  [ ] 13) files               - Write arbitrary files
+  [ ] 14) bootcmd             - Early boot commands
+  [ ] 15) firstboot           - First-boot commands (runcmd)
+  [ ] 16) final               - Final status message
+  [ ] 17) vsphere_spec        - vSphere Customization Spec (XML)
+  [ ] 18) vsphere_scripts     - vSphere Pre/Post Scripts
+
+Commands: [number] toggle | c=configure | a=all | n=none | 0=back
+```
+
+**Key behaviors:**
+- **Platform modules always visible** — `platform_hostname`, `platform_network`, `platform_ntp` shown for vSphere, KVM, and Physical/Other
+- **Real-time conflict resolution** — selecting a platform module auto-disables its cloud-init equivalent (and vice versa) with info message
+- **Defaults**: platform modules ON, cloud-init equivalents OFF
+- Press `c` to enter per-module configuration flow (each selected module configured one-by-one)
+- Press `0` to go back to OS selection
+
+### Per-Module Configuration Flow
+
+After pressing `c`, each selected module is configured sequentially with its own sub-menu. Example for Network module:
+
+```
+============================================================
+  CloudSeed v1.5.0
+  Network Configuration
+============================================================
+
+Configure network for the target VM.
+
+  1) Mode: DHCP (default) or Static
+  2) Interface: eth0
+  3) Address: (static only)
+  4) Netmask: 255.255.255.0 (static only)
+  5) Gateway: (static only)
+  6) DNS: 8.8.8.8,1.1.1.1
+  7) Search domains: 
+
+Press Enter for default [value], type to override. 0=back to module selection.
+```
+
+Each module's configuration applies defaults if you press Enter. You can go back to module selection from any sub-menu.
 
 ---
 
