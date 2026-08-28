@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime
 
-from .model import print_banner, check_shutdown
+from .model import print_section, print_info, print_warn, print_error, print_success, check_shutdown, colorize, Colors
 from .cli import detect_cloud_init_version, get_cloud_init_compatibility
 
 
@@ -255,8 +255,7 @@ def check_disk_space() -> Dict[str, Any]:
 
 def diagnose_all() -> Dict[str, Any]:
     """Run full diagnosis."""
-    print_banner("Cloud-Init Doctor: Full Diagnosis")
-    print("Running comprehensive cloud-init health check...")
+    print_section("Cloud-Init Doctor: Full Diagnosis", "Running comprehensive cloud-init health check...")
     print()
     
     results = {
@@ -285,27 +284,27 @@ def diagnose_all() -> Dict[str, Any]:
         len(results["disk"]["warnings"])
     )
     
-    print(f"\n{'='*60}")
-    print(f"DIAGNOSIS SUMMARY")
-    print(f"{'='*60}")
+    print(f"\n{colorize('='*60, Colors.BLUE)}")
+    print(f"{colorize('DIAGNOSIS SUMMARY', Colors.BOLD + Colors.BLUE)}")
+    print(f"{colorize('='*60, Colors.BLUE)}")
     print(f"Timestamp: {results['timestamp']}")
     print(f"Platform: {results['platform']}")
     print(f"Cloud-init: {results['cloud_init']['version']} ({results['cloud_init']['compatibility']})")
     print(f"Status: {results['cloud_init']['status']}")
     print(f"Errors: {total_errors}")
     print(f"Warnings: {total_warnings}")
-    print(f"{'='*60}")
+    print(f"{colorize('='*60, Colors.BLUE)}")
     
     if total_errors == 0 and total_warnings == 0:
-        print("✅ All checks passed!")
+        print_success("All checks passed!")
     else:
         if total_errors > 0:
-            print("❌ ERRORS found:")
+            print_error("ERRORS found:")
             for cat in ["cloud_init", "cloud_config", "boot", "disk"]:
                 for e in results[cat]["errors"]:
                     print(f"  - [{cat}] {e}")
         if total_warnings > 0:
-            print("⚠️  WARNINGS:")
+            print_warn("WARNINGS:")
             for cat in ["cloud_init", "cloud_config", "boot", "network", "disk"]:
                 for w in results[cat]["warnings"]:
                     print(f"  - [{cat}] {w}")
@@ -317,20 +316,19 @@ def doctor_menu() -> int:
     """Display Cloud-Init Doctor menu."""
     while True:
         check_shutdown()
-        print_banner("Cloud-Init Doctor")
-        print("Diagnose cloud-init issues on this system.")
+        print_section("Cloud-Init Doctor", "Diagnose cloud-init issues on this system")
         print()
-        print("  1) Full Diagnosis (all checks)")
-        print("  2) Cloud-init Status & Version")
-        print("  3) Cloud-init Configuration")
-        print("  4) Boot & Service Status")
-        print("  5) Network Configuration")
-        print("  6) Disk Space")
-        print("  7) Save Diagnosis Report (JSON)")
-        print("  8) Back to Main Menu")
+        print(f"  {colorize('1', Colors.CYAN)}) Full Diagnosis (all checks)")
+        print(f"  {colorize('2', Colors.CYAN)}) Cloud-init Status & Version")
+        print(f"  {colorize('3', Colors.CYAN)}) Cloud-init Configuration")
+        print(f"  {colorize('4', Colors.CYAN)}) Boot & Service Status")
+        print(f"  {colorize('5', Colors.CYAN)}) Network Configuration")
+        print(f"  {colorize('6', Colors.CYAN)}) Disk Space")
+        print(f"  {colorize('7', Colors.CYAN)}) Save Diagnosis Report (JSON)")
+        print(f"  {colorize('0', Colors.GRAY)}) ← Back to Main Menu")
         print()
         
-        choice = input("Select [8]: ").strip() or "8"
+        choice = input(f"  {colorize('Select', Colors.BOLD)} [0]: ").strip() or "0"
         check_shutdown()
         
         if choice == "1":
@@ -338,90 +336,90 @@ def doctor_menu() -> int:
             input("\nPress Enter to continue...")
         elif choice == "2":
             info = check_cloud_init_status()
-            print_banner("Cloud-init Status")
-            print(f"Version: {info['version']}")
-            print(f"Compatibility: {info['compatibility']}")
-            print(f"Status: {info['status']}")
-            print(f"Enabled: {info['enabled']}")
-            print(f"Running: {info['running']}")
+            print_section("Cloud-init Status")
+            print_info(f"Version: {info['version']}")
+            print_info(f"Compatibility: {info['compatibility']}")
+            print_info(f"Status: {info['status']}")
+            print_info(f"Enabled: {info['enabled']}")
+            print_info(f"Running: {info['running']}")
             if info['errors']:
-                print("\nErrors:")
+                print_warn("Errors:")
                 for e in info['errors']:
                     print(f"  - {e}")
             if info['warnings']:
-                print("\nWarnings:")
+                print_warn("Warnings:")
                 for w in info['warnings']:
                     print(f"  - {w}")
             if 'stages' in info:
-                print("\nStages:")
+                print_info("Stages:")
                 for stage, data in info['stages'].items():
-                    status = "✅" if data['completed'] else "❌"
+                    status = f"{colorize('✓', Colors.GREEN)}" if data['completed'] else f"{colorize('✗', Colors.RED)}"
                     print(f"  {status} {stage}: {data['path']}")
             input("\nPress Enter to continue...")
         elif choice == "3":
             info = check_cloud_config()
-            print_banner("Cloud-init Configuration")
-            print(f"Config files found: {len(info['config_files'])}")
+            print_section("Cloud-init Configuration")
+            print_info(f"Config files found: {len(info['config_files'])}")
             for f in info['config_files']:
                 print(f"  - {f}")
             if info['merged_config']:
-                print("\nMerged config keys:")
+                print_info("Merged config keys:")
                 if isinstance(info['merged_config'], dict):
                     for k in info['merged_config'].keys():
                         print(f"  - {k}")
             if info['warnings']:
-                print("\nWarnings:")
+                print_warn("Warnings:")
                 for w in info['warnings']:
                     print(f"  - {w}")
             input("\nPress Enter to continue...")
         elif choice == "4":
             info = check_boot_status()
-            print_banner("Boot & Service Status")
+            print_section("Boot & Service Status")
             if info.get('boot_time'):
-                print(f"Boot time: {info['boot_time']}")
-            print("\nCloud-init services:")
+                print_info(f"Boot time: {info['boot_time']}")
+            print_info("Cloud-init services:")
             for svc, data in info['services'].items():
-                status = "✅ Active" if data['active'] else "❌ Inactive"
+                status = f"{colorize('✓ Active', Colors.GREEN)}" if data['active'] else f"{colorize('✗ Inactive', Colors.RED)}"
                 print(f"  {status}: {svc}")
             if 'failed_units' in info:
-                print(f"\nFailed units:\n{info['failed_units']}")
+                print_warn(f"Failed units:\n{info['failed_units']}")
             if info['warnings']:
-                print("\nWarnings:")
+                print_warn("Warnings:")
                 for w in info['warnings']:
                     print(f"  - {w}")
             input("\nPress Enter to continue...")
         elif choice == "5":
             info = check_network_config()
-            print_banner("Network Configuration")
+            print_section("Network Configuration")
             if info['netplan']:
-                print("Netplan files:")
+                print_info("Netplan files:")
                 for f in info['netplan']:
                     print(f"  - {f}")
             if info['networkd']:
-                print("\nNetworkd configs:")
+                print_info("Networkd configs:")
                 for name, path in info['networkd'].items():
                     print(f"  - {name}: {path}")
             if info['interfaces']:
-                print("\nInterfaces:")
+                print_info("Interfaces:")
                 for iface in info['interfaces']:
                     name = iface.get('ifname', 'unknown')
                     print(f"  - {name}")
             if info['warnings']:
-                print("\nWarnings:")
+                print_warn("Warnings:")
                 for w in info['warnings']:
                     print(f"  - {w}")
             input("\nPress Enter to continue...")
         elif choice == "6":
             info = check_disk_space()
-            print_banner("Disk Space")
+            print_section("Disk Space")
             if info.get('df_output'):
                 print(info['df_output'])
             if info['warnings']:
-                print("\nWarnings:")
+                print_warn("Warnings:")
                 for w in info['warnings']:
                     print(f"  - {w}")
             if info['errors']:
-                print("\nErrors:")
+                print_error("Errors:")
                 for e in info['errors']:
                     print(f"  - {e}")
             input("\nPress Enter to continue...")
@@ -431,14 +429,14 @@ def doctor_menu() -> int:
             try:
                 with open(filename, 'w') as f:
                     json.dump(results, f, indent=2, default=str)
-                print(f"\nReport saved to: {filename}")
+                print_success(f"Report saved to: {filename}")
             except Exception as e:
-                print(f"Error saving report: {e}")
+                print_error(f"Error saving report: {e}")
             input("\nPress Enter to continue...")
-        elif choice == "8":
+        elif choice == "0":
             return 0
         else:
-            print("Invalid selection.")
+            print_error("Invalid selection.")
 
 
 if __name__ == "__main__":

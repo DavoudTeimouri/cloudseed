@@ -60,9 +60,9 @@ This writes (config-only, no ISO):
 - **Windows**: `cloudbase-init.conf`, `cloudbase-init-unattend.conf`, `sysprep-unattend.xml`, `run-sysprep.bat`, `cloudseed.json`, `README.txt`
 - **vSphere extras**: `vsphere-customization-spec.xml`, `vsphere-pre-script.sh/.bat`, `vsphere-post-script.sh/.bat`
 
-**Toolbox** — external tools:
-- Download SID Changer (Windows — change SID without Sysprep)
-- Run SID Changer (Windows — must be Administrator)
+## Toolbox — external tools:
+
+- **Run SID Changer** (Windows — executes Sysprep-based SID change, must be Administrator)
 
 **Config Validator** — validate exported configs:
 - Check configs won't re-run after first boot
@@ -254,21 +254,6 @@ For creating a golden image / template:
 3. **Linux**: `sudo cloud-init clean --machine-id` then shutdown
 4. **Windows**: run `run-sysprep.bat` (as Administrator) — VM shuts down with generalized state
 5. Convert VM to template / clone — each clone gets fresh identity
-
-## Windows SID Change without Sysprep (Toolbox)
-
-Alternative to Sysprep for already-cloned Windows VMs:
-
-```bash
-cloudseed  # Main Menu → Toolbox → Download SID Changer
-```
-
-- Downloads `sidchanger.exe` (from stratus/sidchanger)
-- Copy to target Windows VM
-- Run as Administrator: `sidchanger.exe`
-- Reboot — Machine SID changed without full Sysprep
-
-**Warning**: Only use on cloned VMs that were NOT sysprepped. This is a workaround, not a replacement for proper image preparation.
 
 ## License
 

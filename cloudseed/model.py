@@ -37,29 +37,69 @@ def check_shutdown():
         sys.exit(130)
 
 
+# ANSI color codes
+class Colors:
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    GRAY = '\033[90m'
+
+
+def colorize(text: str, color: str) -> str:
+    """Apply color if stdout is a TTY."""
+    if sys.stdout.isatty():
+        return f"{color}{text}{Colors.RESET}"
+    return text
+
+
 def print_banner(title: str = "") -> None:
-    """Print CloudSeed banner with version and description."""
+    """Print CloudSeed banner with version and description - only for main menu."""
     from . import __version__
     width = 64
     line = "═" * width
     print(f"\n{line}")
-    print(f"  CloudSeed v{__version__}")
-    print(f"  ║  cloud-init / Cloudbase-Init VM Template Generator  ║")
-    print(f"  ║  Config-only (no ISO) · vSphere · KVM · Physical    ║")
-    print(f"  ║  Zero dependencies — Python stdlib only             ║")
+    print(f"  {colorize('CloudSeed', Colors.BOLD + Colors.CYAN)} v{__version__}")
+    print(f"  {colorize('cloud-init / Cloudbase-Init VM Template Generator', Colors.GRAY)}")
+    print(f"  {colorize('Config-only (no ISO) · vSphere · KVM · Physical', Colors.GRAY)}")
+    print(f"  {colorize('Zero dependencies — Python stdlib only', Colors.GRAY)}")
     if title:
-        print(f"  ║  {title:<54} ║")
+        print(f"  {colorize(title, Colors.BOLD + Colors.WHITE)}")
     print(f"{line}\n")
 
 
-def print_sub_banner(title: str, description: str = "") -> None:
-    """Print a sub-menu banner with title and optional description."""
-    width = 60
-    line = "─" * width
-    print(f"\n  {title}")
+def print_section(title: str, description: str = "") -> None:
+    """Print a section header for sub-menus (no box banner)."""
+    print(f"\n{colorize(title, Colors.BOLD + Colors.BLUE)}")
     if description:
-        print(f"  {description}")
-    print(f"  {line}\n")
+        print(f"  {colorize(description, Colors.GRAY)}")
+    print(f"  {colorize('─' * 50, Colors.GRAY)}")
+
+
+def print_info(msg: str) -> None:
+    """Print info message."""
+    print(f"  {colorize('ℹ', Colors.CYAN)} {msg}")
+
+
+def print_warn(msg: str) -> None:
+    """Print warning message."""
+    print(f"  {colorize('⚠', Colors.YELLOW)} {colorize(msg, Colors.YELLOW)}")
+
+
+def print_error(msg: str) -> None:
+    """Print error message."""
+    print(f"  {colorize('✗', Colors.RED)} {colorize(msg, Colors.RED)}")
+
+
+def print_success(msg: str) -> None:
+    """Print success message."""
+    print(f"  {colorize('✓', Colors.GREEN)} {colorize(msg, Colors.GREEN)}")
 
 
 @dataclass
@@ -238,37 +278,37 @@ def _get_unique_path(out_dir: str, filename: str) -> str | None:
 def _choose(prompt: str, options: List[str], allow_back: bool = False) -> str:
     """Choose from options. Returns selected option or 'BACK' if back selected."""
     check_shutdown()
-    print_sub_banner(prompt)
+    print_section(prompt)
     for i, opt in enumerate(options, 1):
-        print(f"  {i}) {opt}")
+        print(f"  {colorize(str(i), Colors.CYAN)}) {opt}")
     if allow_back:
-        print(f"  0) ← Back")
+        print(f"  {colorize('0', Colors.GRAY)}) ← Back")
     while True:
         check_shutdown()
         if allow_back:
-            raw = input("Select [1]: ").strip()
+            raw = input(f"  {colorize('Select', Colors.BOLD)} [1]: ").strip()
         else:
-            raw = input("Select [1]: ").strip()
+            raw = input(f"  {colorize('Select', Colors.BOLD)} [1]: ").strip()
         if not raw:
             return options[0]
         if allow_back and raw == "0":
             return "BACK"
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1]
-        print("Invalid selection, try again.")
+        print_error("Invalid selection, try again.")
 
 
 def _choose_module(prompt: str, options: List[str], defaults: List[str]) -> List[str]:
     """Multi-select for modules with back option."""
     check_shutdown()
-    print_sub_banner(prompt, "Space-separated numbers, 'a' for all, Enter for defaults, 0 to go back")
+    print_section(prompt, "Space-separated numbers, 'a' for all, Enter for defaults, 0 to go back")
     for i, opt in enumerate(options, 1):
-        default_marker = " ✓" if opt in defaults else ""
-        print(f"  {i}) {opt}{default_marker}")
-    print("  0) ← Back")
+        default_marker = f" {colorize('✓', Colors.GREEN)}" if opt in defaults else ""
+        print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{default_marker}")
+    print(f"  {colorize('0', Colors.GRAY)}) ← Back")
     while True:
         check_shutdown()
-        sel = input("\nSelection: ").strip().lower()
+        sel = input(f"\n  {colorize('Selection', Colors.BOLD)}: ").strip().lower()
         if not sel:
             return defaults
         if sel == "0":
@@ -280,7 +320,7 @@ def _choose_module(prompt: str, options: List[str], defaults: List[str]) -> List
             chosen = {options[i - 1] for i in idxs if 1 <= i <= len(options)}
             return [m for m in defaults if m in chosen] + [m for m in chosen if m not in defaults]
         except (ValueError, IndexError):
-            print("Invalid selection, try again.")
+            print_error("Invalid selection, try again.")
 
 
 def collect_interactive() -> TemplateConfig:
@@ -296,7 +336,7 @@ def collect_interactive() -> TemplateConfig:
     cfg = TemplateConfig()
     
     while True:  # Main loop - allows returning to main menu
-        print_banner("Main Menu")
+        print_section("Main Menu", "Generate Configuration | Toolbox | Config Validator | Cloud-Init Doctor | Template Maker | Exit")
         
         # Main action menu
         main_actions = [
@@ -331,6 +371,7 @@ def collect_interactive() -> TemplateConfig:
         
         # Generate Configuration flow with back navigation
         while True:
+            print_section("Platform Selection", "Choose your target virtualization platform")
             platform_choice = _choose("Target platform:", ["vSphere (VMware)", "KVM (libvirt)", "Physical / Other"], allow_back=True)
             if platform_choice == "BACK":
                 break  # Back to main menu
@@ -338,6 +379,7 @@ def collect_interactive() -> TemplateConfig:
             if cfg.platform == "physical / other":
                 cfg.platform = "physical"
             
+            print_section("OS Selection", "Choose the guest operating system")
             os_choice = _choose("Guest OS:", ["Linux", "Windows"], allow_back=True)
             if os_choice == "BACK":
                 continue  # Back to platform selection
@@ -449,7 +491,7 @@ def _configure_modules(cfg: TemplateConfig, available: List[tuple]) -> bool:
 
 
 def _configure_hostname(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Hostname Configuration", "Configure how the VM hostname is set")
+    print_section("Hostname Configuration", "Configure how the VM hostname is set")
     cfg.use_platform_hostname = _ask_bool("Let platform (vSphere/KVM) set hostname", cfg.use_platform_hostname)
     if not cfg.use_platform_hostname:
         cfg.hostname_prefix = _ask("Hostname prefix", cfg.hostname_prefix)
@@ -458,7 +500,7 @@ def _configure_hostname(cfg: TemplateConfig) -> bool:
 
 
 def _configure_users(cfg: TemplateConfig) -> bool:
-    print_sub_banner("User Configuration", "Create admin user with password and sudo/Administrators access")
+    print_section("User Configuration", "Create admin user with password and sudo/Administrators access")
     cfg.username = _ask("Username", cfg.username)
     cfg.password = _ask("Password (plaintext; document risk!)", cfg.password)
     cfg.sudo = _ask_bool("Grant sudo (Linux) / Administrators (Windows)", cfg.sudo)
@@ -468,19 +510,19 @@ def _configure_users(cfg: TemplateConfig) -> bool:
 
 
 def _configure_ssh(cfg: TemplateConfig) -> bool:
-    print_sub_banner("SSH Configuration", "Add SSH authorized keys (one per line)")
+    print_section("SSH Configuration", "Add SSH authorized keys (one per line)")
     cfg.ssh_keys = _ask_list("SSH public keys (ssh-rsa / ssh-ed25519 ...)")
     return True
 
 
 def _configure_root(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Root Hardening", "Disable root SSH login")
+    print_section("Root Hardening", "Disable root SSH login")
     cfg.disable_root = _ask_bool("Disable root SSH login", cfg.disable_root)
     return True
 
 
 def _configure_network(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Network Configuration", "Configure network - DHCP or static IP with DNS")
+    print_section("Network Configuration", "Configure network - DHCP or static IP with DNS")
     cfg.let_platform_handle_network = _ask_bool("Let platform handle network (avoid conflicts with cloud-init)", cfg.let_platform_handle_network)
     if not cfg.let_platform_handle_network:
         cfg.net_mode = _choose("Network mode:", ["dhcp", "static"], allow_back=False).split()[0]
@@ -495,14 +537,14 @@ def _configure_network(cfg: TemplateConfig) -> bool:
 
 
 def _configure_packages(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Package Configuration", "Install packages and optionally upgrade on first boot")
+    print_section("Package Configuration", "Install packages and optionally upgrade on first boot")
     cfg.package_upgrade = _ask_bool("Upgrade packages on first boot", cfg.package_upgrade)
     cfg.packages = _ask_list("Packages to install (blank=none)")
     return True
 
 
 def _configure_locale(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Locale & Timezone", "Set timezone, locale, and keyboard layout")
+    print_section("Locale & Timezone", "Set timezone, locale, and keyboard layout")
     cfg.timezone = _ask("Timezone", cfg.timezone)
     cfg.locale = _ask("Locale", cfg.locale)
     cfg.keyboard_layout = _ask("Keyboard layout", cfg.keyboard_layout)
@@ -510,14 +552,14 @@ def _configure_locale(cfg: TemplateConfig) -> bool:
 
 
 def _configure_disk(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Disk Configuration", "Grow root filesystem on first boot")
+    print_section("Disk Configuration", "Grow root filesystem on first boot")
     cfg.grow_device = _ask("Grow device", cfg.grow_device)
     cfg.grow_partition = _ask("Partition number", cfg.grow_partition)
     return True
 
 
 def _configure_ntp(cfg: TemplateConfig) -> bool:
-    print_sub_banner("NTP Configuration", "Configure NTP time synchronization")
+    print_section("NTP Configuration", "Configure NTP time synchronization")
     cfg.let_platform_handle_ntp = _ask_bool("Let platform handle NTP", cfg.let_platform_handle_ntp)
     if not cfg.let_platform_handle_ntp:
         cfg.ntp_servers = _ask_list("NTP servers")
@@ -527,7 +569,7 @@ def _configure_ntp(cfg: TemplateConfig) -> bool:
 
 
 def _configure_files(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Write Files", "Write arbitrary files to the target system (blank path to finish)")
+    print_section("Write Files", "Write arbitrary files to the target system (blank path to finish)")
     while True:
         check_shutdown()
         p = input("  file path (blank to stop): ").strip()
@@ -540,25 +582,25 @@ def _configure_files(cfg: TemplateConfig) -> bool:
 
 
 def _configure_bootcmd(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Early Boot Commands", "Commands that run early in boot (bootcmd)")
+    print_section("Early Boot Commands", "Commands that run early in boot (bootcmd)")
     cfg.bootcmd = _ask_list("bootcmd (early boot commands)")
     return True
 
 
 def _configure_firstboot(cfg: TemplateConfig) -> bool:
-    print_sub_banner("First-Boot Commands", "Commands that run on first boot (runcmd)")
+    print_section("First-Boot Commands", "Commands that run on first boot (runcmd)")
     cfg.firstboot = _ask_list("First-boot commands (runcmd)")
     return True
 
 
 def _configure_final(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Final Message", "Message displayed when cloud-init completes")
+    print_section("Final Message", "Message displayed when cloud-init completes")
     cfg.final_message = _ask("Final message", cfg.final_message)
     return True
 
 
 def _configure_sysprep(cfg: TemplateConfig) -> bool:
-    print_sub_banner("Windows Sysprep", "Generalize Windows for cloning (creates new SID)")
+    print_section("Windows Sysprep", "Generalize Windows for cloning (creates new SID)")
     cfg.sysprep = _ask_bool("Run Sysprep generalize (new SID)", cfg.sysprep)
     if cfg.sysprep:
         cfg.sysprep_unattended = _ask_bool("Fully unattended (like vSphere Guest Customization)", cfg.sysprep_unattended)
@@ -573,7 +615,7 @@ def _configure_sysprep(cfg: TemplateConfig) -> bool:
 
 
 def _configure_vsphere_spec(cfg: TemplateConfig) -> bool:
-    print_sub_banner("vSphere Customization Spec Export", "Export vSphere Guest Customization Specification (XML)")
+    print_section("vSphere Customization Spec Export", "Export vSphere Guest Customization Specification (XML)")
     cfg.export_vsphere_spec = _ask_bool("Export vSphere Customization Spec (XML)", cfg.export_vsphere_spec)
     if cfg.export_vsphere_spec:
         cfg.vsphere_spec_name = _ask("Spec name", cfg.vsphere_spec_name)
@@ -581,7 +623,7 @@ def _configure_vsphere_spec(cfg: TemplateConfig) -> bool:
 
 
 def _configure_vsphere_scripts(cfg: TemplateConfig) -> bool:
-    print_sub_banner("vSphere Pre/Post Customization Scripts", "Scripts that run before/after cloud-init during vSphere Guest Customization")
+    print_section("vSphere Pre/Post Customization Scripts", "Scripts that run before/after cloud-init during vSphere Guest Customization")
     cfg.use_sample_scripts = _ask_bool("Use sample scripts (customizable)", cfg.use_sample_scripts)
     if cfg.use_sample_scripts:
         print("\nSample Pre-customization script (runs before cloud-init):")

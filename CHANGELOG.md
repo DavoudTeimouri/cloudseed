@@ -5,6 +5,28 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-28
+
+### Added
+- **Modern menu UI** — removed box-drawing banners from sub-menus; only **main menu** shows the CloudSeed banner (version, tagline, platform list). Sub-menus use clean section headers (`print_section`) with colored titles and descriptions.
+- **Color-coded messaging** — `print_info` (cyan), `print_success` (green), `print_warn` (yellow), `print_error` (red) using ANSI codes; works on Windows 10+ and Linux terminals.
+- **Toolbox: Valid SID Changer run only** — removed invalid `sidchanger.exe` download; now only **Run SID Changer** option that executes Microsoft's official `Sysprep`-based SID change (or user-provided valid tool) on Windows. Toolbox menu clearly documents that no external download is provided.
+- **Config Validator integration fix** — validator no longer crashes on "Config Validator" menu selection; `_configure_validator` now properly calls `validator.validate_all()` with correct parameters.
+- **Cloud-Init Doctor integration fix** — doctor menu now works; individual check functions accept optional `config_dir` parameter.
+- **Template Maker updated** — uses new colorized section headers instead of banners; consistent back-navigation (`0) ← Back`).
+
+### Changed
+- **Banner removal** — `print_banner()` and `print_sub_banner()` removed from `model.py`; replaced by `print_section()` (colored title + description) and `print_info/print_warn/print_error/print_success()` for consistent messaging.
+- **EXE metadata updated** — `CompanyName` changed to `CloudSeed Project` (removed personal name); `FileVersion=1.3.0.0`, `ProductVersion=1.3.0.0`. All other properties retained (`FileDescription`, `LegalCopyright`, `OriginalFilename`, `ProductName`).
+- **Version bump** — 1.2.0 → 1.3.0 across `__init__.py`, `pyproject.toml`, `version.txt`.
+- **Menu navigation** — all sub-menus show `0) ← Back` with cyan highlight; main menu shows `0) Exit`.
+
+### Fixed
+- **Config Validator crash** — selecting "Config Validator" from main menu no longer throws error; validator now receives proper config directory path and runs full validation suite (Linux cloud-init config, Windows sysprep/Cloudbase-Init, JSON consistency, first-boot persistence checks).
+- **Toolbox SID Changer** — removed broken download; "Run SID Changer" now executes `sysprep /generalize /oobe /shutdown /unattend:<file>` for proper Windows SID regeneration (same as Template Maker Windows path).
+- **Doctor menu** — individual diagnosis checks (status, config, boot, network, disk) now work; full diagnosis saves JSON report option functional.
+- **Cross-module imports** — `validator.py`, `doctor.py`, `templatemaker.py`, `toolbox.py` all import colorized printers from `model` instead of old banner functions.
+
 ## [1.2.0] - 2026-08-28
 
 ### Added

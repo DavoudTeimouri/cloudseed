@@ -10,7 +10,7 @@ import shutil
 from typing import Optional, List, Tuple
 from pathlib import Path
 
-from .model import print_banner, check_shutdown, _ask_bool, _ask
+from .model import print_section, print_info, print_warn, print_error, print_success, check_shutdown, _ask_bool, _ask, colorize, Colors
 from .cli import detect_cloud_init_version, get_cloud_init_compatibility
 
 
@@ -248,8 +248,7 @@ def template_maker_menu() -> int:
     """Main template maker menu."""
     while True:
         check_shutdown()
-        print_banner("Template Maker")
-        print("Prepare CURRENT machine as a VM template.")
+        print_section("Template Maker", "Prepare CURRENT machine as a VM template")
         print()
         
         # Detect system info
@@ -258,45 +257,44 @@ def template_maker_menu() -> int:
         is_physical, phys_reason = is_physical_machine()
         is_admin = check_root()
         
-        print(f"Detected OS: {os_type.upper()}")
-        print(f"Detected Platform: {virt_platform.upper()}")
-        print(f"Physical Machine: {'YES' if is_physical else 'NO'} ({phys_reason})")
-        print(f"Running as Admin/Root: {'YES' if is_admin else 'NO'}")
+        print_info(f"Detected OS: {os_type.upper()}")
+        print_info(f"Detected Platform: {virt_platform.upper()}")
+        print_info(f"Physical Machine: {'YES' if is_physical else 'NO'} ({phys_reason})")
+        print_info(f"Running as Admin/Root: {'YES' if is_admin else 'NO'}")
         print()
         
         if is_physical:
-            print("⚠️  WARNING: This appears to be a PHYSICAL machine!")
-            print("   Template Maker is for VIRTUAL MACHINES only.")
-            print("   Converting a physical machine to a template is not supported.")
+            print_warn("This appears to be a PHYSICAL machine!")
+            print_warn("Template Maker is for VIRTUAL MACHINES only.")
+            print_warn("Converting a physical machine to a template is not supported.")
             print()
         
         if os_type == "unknown":
-            print("❌ Unsupported operating system.")
+            print_error("Unsupported operating system.")
             print()
         
         if not is_admin:
-            print("⚠️  WARNING: Not running as root/Administrator!")
-            print("   Template preparation requires elevated privileges.")
+            print_warn("Not running as root/Administrator!")
+            print_warn("Template preparation requires elevated privileges.")
             print()
         
-        print("Options:")
-        print("  1) Prepare Linux template (clean cloud-init, remove SSH keys, etc.)")
-        print("  2) Prepare Windows template (run Sysprep generalize + shutdown)")
-        print("  3) Remove CloudSeed from this machine")
-        print("  4) Full template preparation (OS-specific + remove CloudSeed + poweroff)")
-        print("  5) Back to Main Menu")
+        print(f"  {colorize('1', Colors.CYAN)}) Prepare Linux template (clean cloud-init, remove SSH keys)")
+        print(f"  {colorize('2', Colors.CYAN)}) Prepare Windows template (run Sysprep generalize + shutdown)")
+        print(f"  {colorize('3', Colors.CYAN)}) Remove CloudSeed from this machine")
+        print(f"  {colorize('4', Colors.CYAN)}) Full template preparation (OS-specific + remove CloudSeed + poweroff)")
+        print(f"  {colorize('0', Colors.GRAY)}) ← Back to Main Menu")
         print()
         
-        choice = input("Select [5]: ").strip() or "5"
+        choice = input(f"  {colorize('Select', Colors.BOLD)} [0]: ").strip() or "0"
         check_shutdown()
         
         if choice == "1":
             if os_type != "linux":
-                print("This option is for Linux only.")
+                print_error("This option is for Linux only.")
             elif is_physical:
-                print("Cannot prepare physical machine as template.")
+                print_error("Cannot prepare physical machine as template.")
             elif not is_admin:
-                print("Requires root privileges. Run with sudo.")
+                print_error("Requires root privileges. Run with sudo.")
             else:
                 confirm = _ask_bool("This will clean cloud-init state and remove SSH host keys. Continue?")
                 if confirm:
@@ -305,11 +303,11 @@ def template_maker_menu() -> int:
         
         elif choice == "2":
             if os_type != "windows":
-                print("This option is for Windows only.")
+                print_error("This option is for Windows only.")
             elif is_physical:
-                print("Cannot prepare physical machine as template.")
+                print_error("Cannot prepare physical machine as template.")
             elif not is_admin:
-                print("Requires Administrator privileges. Run as Administrator.")
+                print_error("Requires Administrator privileges. Run as Administrator.")
             else:
                 confirm = _ask_bool("This will run Sysprep generalize and SHUTDOWN the machine. Continue?")
                 if confirm:
@@ -324,17 +322,16 @@ def template_maker_menu() -> int:
         
         elif choice == "4":
             if is_physical:
-                print("Cannot prepare physical machine as template.")
+                print_error("Cannot prepare physical machine as template.")
                 input("\nPress Enter to continue...")
                 continue
             
             if not is_admin:
-                print("Requires root/Administrator privileges.")
+                print_error("Requires root/Administrator privileges.")
                 input("\nPress Enter to continue...")
                 continue
             
-            print("\n=== FULL TEMPLATE PREPARATION ===")
-            print(f"OS: {os_type.upper()}, Platform: {virt_platform.upper()}")
+            print_section("Full Template Preparation", f"OS: {os_type.upper()}, Platform: {virt_platform.upper()}")
             print()
             
             confirm = _ask_bool(
@@ -346,7 +343,7 @@ def template_maker_menu() -> int:
             )
             
             if not confirm:
-                print("Cancelled.")
+                print_info("Cancelled.")
                 input("\nPress Enter to continue...")
                 continue
             
@@ -359,8 +356,8 @@ def template_maker_menu() -> int:
             
             if success:
                 remove_cloudseed()
-                print("\nTemplate preparation complete.")
-                print("Machine will now power off...")
+                print_success("Template preparation complete.")
+                print_info("Machine will now power off...")
                 
                 # Poweroff
                 if os_type == "linux":
@@ -368,15 +365,15 @@ def template_maker_menu() -> int:
                 else:
                     subprocess.run(["shutdown", "/s", "/t", "0"])
             else:
-                print("\nTemplate preparation failed. Machine NOT powered off.")
+                print_error("Template preparation failed. Machine NOT powered off.")
             
             input("\nPress Enter to continue...")
         
-        elif choice == "5":
+        elif choice == "0":
             return 0
         
         else:
-            print("Invalid selection.")
+            print_error("Invalid selection.")
 
 
 if __name__ == "__main__":

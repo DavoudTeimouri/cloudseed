@@ -9,7 +9,7 @@ import sys
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
-from .model import TemplateConfig, print_banner, check_shutdown
+from .model import TemplateConfig, print_section, print_info, print_warn, print_error, print_success, check_shutdown, colorize, Colors
 
 
 def validate_no_persistent_runs(config_dir: str) -> List[str]:
@@ -199,8 +199,7 @@ def validate_all(config_dir: str) -> List[str]:
     """Run all validations on a config directory."""
     all_warnings = []
     
-    print_banner("Config Validation")
-    print(f"Validating: {config_dir}")
+    print_section("Config Validation", f"Validating: {config_dir}")
     print()
     
     # Determine OS type from cloudseed.json
@@ -221,9 +220,9 @@ def validate_all(config_dir: str) -> List[str]:
         all_warnings.extend(validate_windows_config(config_dir))
     
     if not all_warnings:
-        print("✅ All validations passed!")
+        print_success("All validations passed!")
     else:
-        print(f"⚠️  Found {len(all_warnings)} warning(s):")
+        print_warn(f"Found {len(all_warnings)} warning(s):")
         for w in all_warnings:
             print(f"  - {w}")
     
@@ -235,27 +234,26 @@ def validator_menu() -> int:
     """Display validator menu."""
     while True:
         check_shutdown()
-        print_banner("Config Validator")
-        print("Validate exported CloudSeed configurations.")
+        print_section("Config Validator", "Validate exported CloudSeed configurations")
         print()
-        print("  1) Validate a config directory")
-        print("  2) Back to Main Menu")
+        print(f"  {colorize('1', Colors.CYAN)}) Validate a config directory")
+        print(f"  {colorize('0', Colors.GRAY)}) ← Back to Main Menu")
         print()
         
-        choice = input("Select [2]: ").strip() or "2"
+        choice = input(f"  {colorize('Select', Colors.BOLD)} [0]: ").strip() or "0"
         check_shutdown()
         
         if choice == "1":
             path = input("Config directory path [.]: ").strip() or "."
             if not os.path.isdir(path):
-                print(f"Not a directory: {path}")
+                print_error(f"Not a directory: {path}")
             else:
                 validate_all(path)
             input("\nPress Enter to continue...")
-        elif choice == "2":
+        elif choice == "0":
             return 0
         else:
-            print("Invalid selection.")
+            print_error("Invalid selection.")
 
 
 if __name__ == "__main__":
