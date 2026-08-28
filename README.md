@@ -1,6 +1,6 @@
 # CloudSeed
 
-Command-line menu app that builds **cloud-init** customization configuration for new VM provisioning on **VMware vSphere** and **KVM** — for both **Linux** (cloud-init) and **Windows** (Cloudbase-Init + Sysprep).
+Command-line menu app that builds **cloud-init** customization configuration for new VM provisioning on **VMware vSphere**, **KVM**, and **Physical/Other** — for both **Linux** (cloud-init) and **Windows** (Cloudbase-Init + Sysprep).
 
 **Config-only:** CloudSeed emits `user-data`/`meta-data`, Cloudbase-Init conf files and a Windows Sysprep answer file. It does **not** build an ISO — you apply the config directly (guestinfo/vApp on vSphere, `--cloud-init` on KVM, or drop-in on the golden image). See [GUIDE.md](GUIDE.md).
 
@@ -48,10 +48,11 @@ cloudseed --json config.json --out ./out
 This writes (config-only, no ISO):
 - **Linux**: `user-data`, `meta-data`, `cloudseed.json`, `README.txt`
 - **Windows**: `cloudbase-init.conf`, `cloudbase-init-unattend.conf`, `sysprep-unattend.xml`, `run-sysprep.bat`, `cloudseed.json`, `README.txt`
+- **vSphere extras**: `vsphere-customization-spec.xml`, `vsphere-pre-script.sh/.bat`, `vsphere-post-script.sh/.bat`
 
 ## Interactive menu flow
 
-1. Pick target platform: **VMware vSphere** or **KVM**
+1. Pick target platform: **vSphere (VMware)**, **KVM (libvirt)**, or **Physical / Other**
 2. Pick OS: **Linux** or **Windows**
 3. Multi-select cloud-init / Cloudbase-Init **modules** (all recommended by default; deselect any)
 4. For each selected module, defaults are shown — press Enter to accept or type an override
@@ -77,12 +78,29 @@ This writes (config-only, no ISO):
 | `final` | ✅ | ❌ | 22.1 | Final status message on console |
 | `sysprep` | ❌ | ✅ | N/A | Windows Sysprep generalize (new SID) |
 
+### Platform compatibility modules (avoid cloud-init conflicts)
+
+| Module | Linux | Windows | Description |
+|--------|:-----:|:-------:|-------------|
+| `platform_hostname` | ✅ | ✅ | Let vSphere/KVM set VM hostname (default: on) |
+| `platform_network` | ✅ | ✅ | Let platform handle network config (avoid cloud-init conflicts) |
+| `platform_ntp` | ✅ | ✅ | Let platform handle NTP (avoid cloud-init conflicts) |
+
+### vSphere-specific modules
+
+| Module | Linux | Windows | Description |
+|--------|:-----:|:-------:|-------------|
+| `vsphere_spec` | ✅ | ✅ | Export vSphere Customization Spec (XML) |
+| `vsphere_scripts` | ✅ | ✅ | vSphere Pre/Post Customization Scripts (with samples) |
+
 ## Notes on platforms
 
-- **vSphere**: apply Linux via VM **guestinfo** (`guestinfo.userdata` / `guestinfo.metadata`) or drop `user-data` into the golden image's `/etc/cloud/cloud.cfg.d/`. Windows: place `cloudbase-init*.conf` in the Cloudbase-Init conf dir and run `run-sysprep.bat` before sealing.
+- **vSphere**: apply Linux via VM **guestinfo** (`guestinfo.userdata` / `guestinfo.metadata`) or drop `user-data` into the golden image's `/etc/cloud/cloud.cfg.d/`. Windows: place `cloudbase-init*.conf` in the Cloudbase-Init conf dir and run `run-sysprep.bat` before sealing. Use exported Customization Spec XML for vSphere Guest Customization.
 - **KVM**: `virt-install --cloud-init user-data=./user-data,meta-data=./meta-data`, or drop-in on the image. Windows same as vSphere for conf files.
+- **Physical / Other**: CloudSeed generates standard cloud-init / Cloudbase-Init configs for any provisioning method (PXE, ISO, config drive, etc.)
 - **Passwords are hashed by default** with a `$6$` SHA-512 crypt hash (cloud-init rejects plaintext). Resolution: host `crypt()` → `openssl passwd -6` → pure-stdlib fallback. Use `--plaintext-password` to emit plaintext (discouraged).
 - **No ISO** is produced — CloudSeed is config-only. Full apply steps in [GUIDE.md](GUIDE.md).
+- **Conflict avoidance**: Enable "Let Platform Handle..." modules to let vSphere/KVM manage hostname/network/NTP instead of cloud-init, avoiding duplicate configuration.
 
 ## Command-line flags
 
@@ -95,7 +113,7 @@ This writes (config-only, no ISO):
 | `--print` | (batch) also print generated contents to stdout. |
 | `--version` | Print `CloudSeed <version>` and exit. |
 | `--detect-cloud-init` | Detect installed cloud-init version on current system and show compatibility. |
-| `--write-to-cloud-init-path` | (interactive) write generated user-data directly to `/etc/cloud/cloud.cfg.d/99-cloudseed.cfg` (requires root). |
+| `--write-to-cloud-init-path` | Write generated user-data directly to `/etc/cloud/cloud.cfg.d/99-cloudseed.cfg` (Linux only, requires root). |
 
 ## Configuration reference (JSON / `--json`)
 
@@ -103,10 +121,12 @@ This writes (config-only, no ISO):
 
 ```jsonc
 {
-  "platform": "vsphere",          // "vsphere" | "kvm"
+  "platform": "vsphere",          // "vsphere" | "kvm" | "physical"
   "os_type": "linux",             // "linux" | "windows"
   "modules": ["hostname","users","ssh","network","packages","firstboot"],
-  "hostname": "web01",
+  "hostname": "",                 // empty = auto-generate from prefix
+  "hostname_prefix": "vm",        // prefix for auto-generated hostname
+  "use_platform_hostname": true,  // let platform (vSphere/KVM) set hostname
   "username": "admin",
   "password": "ChangeMe!123",     // hashed to $6$ by default
   "plaintext_password": false,    // true => emit plaintext (see flag)
@@ -121,11 +141,13 @@ This writes (config-only, no ISO):
   "net_address": "", "net_netmask": "255.255.255.0", "net_gateway": "",
   "net_dns": ["8.8.8.8","1.1.1.1"],
   "net_search": [],
+  "let_platform_handle_network": false,  // let platform handle network (avoid conflicts)
   "package_upgrade": true, "packages": ["nginx"],
   "timezone": "UTC",
   "locale": "en_US.UTF-8", "keyboard_layout": "us",
   "grow_device": "/dev/sda", "grow_partition": "1",
   "ntp_servers": ["pool.ntp.org"],
+  "let_platform_handle_ntp": false,      // let platform handle NTP
   "write_files": [{"path":"/etc/foo","content":"bar","permissions":"0644"}],
   "bootcmd": [], "firstboot": ["systemctl enable nginx"],
   "final_message": "CloudSeed: system ready.",
@@ -133,7 +155,14 @@ This writes (config-only, no ISO):
   "sysprep": true, "sysprep_organization": "MyOrg",
   "sysprep_owner": "Administrator", "sysprep_computer_prefix": "WIN",
   "sysprep_timezone": "W. Europe Standard Time", "sysprep_locale": "en-US",
-  "sysprep_product_key": ""
+  "sysprep_product_key": "",
+  // vSphere Customization Spec export:
+  "export_vsphere_spec": false,
+  "vsphere_spec_name": "CloudSeed-Spec",
+  // vSphere Pre/Post Customization Scripts:
+  "vsphere_pre_script": "",
+  "vsphere_post_script": "",
+  "use_sample_scripts": false
 }
 ```
 

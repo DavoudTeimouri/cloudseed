@@ -20,4 +20,12 @@ MODULES = [
     ("firstboot", "First-Boot Commands (runcmd)", ["linux", "windows"]),
     ("final", "Final Status Message", ["linux"]),
     ("sysprep", "Windows Sysprep Generalize (New SID)", ["windows"]),
+    # Platform compatibility settings
+    ("platform_hostname", "Let Platform Set Hostname (vSphere/KVM)", ["linux", "windows"]),
+    ("platform_network", "Let Platform Handle Network (Avoid Conflicts)", ["linux", "windows"]),
+    ("platform_ntp", "Let Platform Handle NTP", ["linux", "windows"]),
+    # vSphere Customization Spec
+    ("vsphere_spec", "Export vSphere Customization Spec", ["linux", "windows"]),
+    # vSphere Pre/Post Customization Scripts
+    ("vsphere_scripts", "vSphere Pre/Post Customization Scripts", ["linux", "windows"]),
 ]

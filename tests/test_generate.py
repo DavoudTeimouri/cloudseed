@@ -42,6 +42,9 @@ def test_linux_full_userdata():
         write_files=[{"path": "/etc/motd", "content": "hi", "permissions": "0644"}],
         bootcmd=["echo boot"], firstboot=["systemctl enable nginx"],
         final_message="ready",
+        use_platform_hostname=False,  # Ensure hostname goes to cloud-init
+        let_platform_handle_network=False,  # Ensure network goes to cloud-init
+        let_platform_handle_ntp=False,  # Ensure NTP goes to cloud-init
     )
     ud = G.build_user_data(cfg)
     assert ud.startswith("#cloud-config")

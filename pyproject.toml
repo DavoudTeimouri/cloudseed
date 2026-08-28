@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cloudseed"
-version = "0.2.2"
+version = "1.0.0"
 description = "CloudSeed - Generate cloud-init / Cloudbase-Init VM templates for vSphere and KVM (Linux + Windows). Config-only, no ISO. Zero dependencies (stdlib only)."
 readme = "README.md"
 requires-python = ">=3.8"

@@ -13,12 +13,14 @@ from typing import List, Optional
 @dataclass
 class TemplateConfig:
     # selection
-    platform: str = "vsphere"          # "vsphere" | "kvm"
+    platform: str = "vsphere"          # "vsphere" | "kvm" | "physical"
     os_type: str = "linux"             # "linux" | "windows"
     modules: List[str] = field(default_factory=list)
 
     # --- identity ---
-    hostname: str = "vm-template"
+    hostname: str = ""  # Empty = auto-generate from platform/prefix
+    hostname_prefix: str = "vm"        # Prefix for auto-generated hostname
+    use_platform_hostname: bool = True  # Let platform (vSphere/KVM) set hostname
 
     # --- users ---
     username: str = "admin"
@@ -41,6 +43,8 @@ class TemplateConfig:
     net_gateway: str = ""
     net_dns: List[str] = field(default_factory=lambda: ["8.8.8.8", "1.1.1.1"])
     net_search: List[str] = field(default_factory=list)
+    # Platform-specific: let platform handle network (avoid conflicts)
+    let_platform_handle_network: bool = False
 
     # --- packages ---
     package_upgrade: bool = True
@@ -59,6 +63,8 @@ class TemplateConfig:
     # --- ntp ---
     ntp_servers: List[str] = field(default_factory=lambda: ["pool.ntp.org"])
     ntp_pools: List[str] = field(default_factory=list)
+    # Platform-specific: let platform handle NTP
+    let_platform_handle_ntp: bool = False
 
     # --- files / commands ---
     write_files: List[dict] = field(default_factory=list)   # {"path","content","permissions"}
@@ -74,6 +80,15 @@ class TemplateConfig:
     sysprep_timezone: str = "W. Europe Standard Time"
     sysprep_locale: str = "en-US"
     sysprep_product_key: str = ""
+
+    # --- vSphere Customization Spec export ---
+    export_vsphere_spec: bool = False
+    vsphere_spec_name: str = "CloudSeed-Spec"
+
+    # --- vSphere Pre/Post Customization Scripts ---
+    vsphere_pre_script: str = ""
+    vsphere_post_script: str = ""
+    use_sample_scripts: bool = False
 
     def has(self, mod: str) -> bool:
         return mod in self.modules
@@ -137,8 +152,10 @@ def collect_interactive() -> TemplateConfig:
     print("\n(Defaults shown in [brackets]. Press Enter to accept.)")
 
     cfg.platform = _choose(
-        "Target platform:", ["vSphere (VMware)", "KVM (libvirt)"]
+        "Target platform:", ["vSphere (VMware)", "KVM (libvirt)", "Physical / Other"]
     ).split()[0].lower()
+    if cfg.platform == "physical / other":
+        cfg.platform = "physical"
     cfg.os_type = _choose("Guest OS:", ["Linux", "Windows"]).split()[0].lower()
 
     available = [(mid, lbl) for (mid, lbl, oses) in MODULES if cfg.os_type in oses]
@@ -156,8 +173,13 @@ def collect_interactive() -> TemplateConfig:
         chosen = {available[i - 1][0] for i in idxs if 1 <= i <= len(available)}
         cfg.modules = [m for m in defaults if m in chosen] + [m for m in chosen if m not in defaults]
 
-    if cfg.has("hostname"):
-        cfg.hostname = _ask("Hostname", cfg.hostname)
+    # Hostname settings
+    if cfg.has("hostname") or cfg.has("platform_hostname"):
+        print("\n--- Hostname Configuration ---")
+        cfg.use_platform_hostname = _ask_bool("Let platform (vSphere/KVM) set hostname", cfg.use_platform_hostname)
+        if not cfg.use_platform_hostname:
+            cfg.hostname_prefix = _ask("Hostname prefix", cfg.hostname_prefix)
+            cfg.hostname = _ask("Hostname (blank = auto-generate from prefix)", cfg.hostname)
 
     if cfg.has("users"):
         cfg.username = _ask("Username", cfg.username)
@@ -172,15 +194,18 @@ def collect_interactive() -> TemplateConfig:
     if cfg.has("root"):
         cfg.disable_root = _ask_bool("Disable root SSH login", cfg.disable_root)
 
-    if cfg.has("network"):
-        cfg.net_mode = _choose("Network mode:", ["dhcp", "static"]).split()[0]
-        if cfg.net_mode == "static":
-            cfg.net_interface = _ask("Interface name", cfg.net_interface)
-            cfg.net_address = _ask("IP address", cfg.net_address)
-            cfg.net_netmask = _ask("Netmask", cfg.net_netmask)
-            cfg.net_gateway = _ask("Gateway", cfg.net_gateway)
-            cfg.net_dns = _ask_list("DNS servers")
-            cfg.net_search = _ask_list("DNS search domains (blank=none)")
+    if cfg.has("network") or cfg.has("platform_network"):
+        print("\n--- Network Configuration ---")
+        cfg.let_platform_handle_network = _ask_bool("Let platform handle network (avoid conflicts with cloud-init)", cfg.let_platform_handle_network)
+        if not cfg.let_platform_handle_network:
+            cfg.net_mode = _choose("Network mode:", ["dhcp", "static"]).split()[0]
+            if cfg.net_mode == "static":
+                cfg.net_interface = _ask("Interface name", cfg.net_interface)
+                cfg.net_address = _ask("IP address", cfg.net_address)
+                cfg.net_netmask = _ask("Netmask", cfg.net_netmask)
+                cfg.net_gateway = _ask("Gateway", cfg.net_gateway)
+                cfg.net_dns = _ask_list("DNS servers")
+                cfg.net_search = _ask_list("DNS search domains (blank=none)")
 
     if cfg.has("packages"):
         cfg.package_upgrade = _ask_bool("Upgrade packages on first boot", cfg.package_upgrade)
@@ -195,10 +220,13 @@ def collect_interactive() -> TemplateConfig:
         cfg.grow_device = _ask("Grow device", cfg.grow_device)
         cfg.grow_partition = _ask("Partition number", cfg.grow_partition)
 
-    if cfg.has("ntp"):
-        cfg.ntp_servers = _ask_list("NTP servers")
-        if not cfg.ntp_servers:
-            cfg.ntp_servers = ["pool.ntp.org"]
+    if cfg.has("ntp") or cfg.has("platform_ntp"):
+        print("\n--- NTP Configuration ---")
+        cfg.let_platform_handle_ntp = _ask_bool("Let platform handle NTP", cfg.let_platform_handle_ntp)
+        if not cfg.let_platform_handle_ntp:
+            cfg.ntp_servers = _ask_list("NTP servers")
+            if not cfg.ntp_servers:
+                cfg.ntp_servers = ["pool.ntp.org"]
 
     if cfg.has("files"):
         print("Write files: for each, give path then content (blank path ends).")
@@ -228,6 +256,25 @@ def collect_interactive() -> TemplateConfig:
             cfg.sysprep_timezone = _ask("Timezone", cfg.sysprep_timezone)
             cfg.sysprep_locale = _ask("Locale (UI)", cfg.sysprep_locale)
             cfg.sysprep_product_key = input("Product key (blank=skip): ").strip()
+
+    # vSphere Customization Spec
+    if cfg.has("vsphere_spec") and cfg.platform == "vsphere":
+        print("\n--- vSphere Customization Spec Export ---")
+        cfg.export_vsphere_spec = _ask_bool("Export vSphere Customization Spec (XML)", cfg.export_vsphere_spec)
+        if cfg.export_vsphere_spec:
+            cfg.vsphere_spec_name = _ask("Spec name", cfg.vsphere_spec_name)
+
+    # vSphere Pre/Post Customization Scripts
+    if cfg.has("vsphere_scripts") and cfg.platform == "vsphere":
+        print("\n--- vSphere Pre/Post Customization Scripts ---")
+        cfg.use_sample_scripts = _ask_bool("Use sample scripts (customizable)", cfg.use_sample_scripts)
+        if cfg.use_sample_scripts:
+            print("\nSample Pre-customization script (runs before cloud-init):")
+            print("# Example: Register with Satellite, install agents, etc.")
+            cfg.vsphere_pre_script = _ask("Pre-customization script (blank to skip)", "")
+            print("\nSample Post-customization script (runs after cloud-init):")
+            print("# Example: Join domain, run compliance checks, etc.")
+            cfg.vsphere_post_script = _ask("Post-customization script (blank to skip)", "")
 
     return cfg
 
