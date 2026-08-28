@@ -5,7 +5,20 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.0] - 2026-08-28
+## [1.5.2] - 2026-08-28
+
+### Added
+- **Input validation for network fields** — new validation functions (`_is_valid_ip`, `_is_valid_netmask`) and interactive helpers (`_ask_ip`, `_ask_netmask`, `_ask_gateway`, `_ask_dns`) that validate IPv4 addresses, netmasks, gateway, and DNS entries with example hints on invalid input.
+- **Unique instance-id generation** — meta-data now uses a unique `iid-<random8>` per configuration instead of static `iid-cloudseed`, preventing conflicts when deploying multiple VMs from the same config.
+
+### Changed
+- **Output directory organization** — generated files now placed in platform/OS specific subdirectories (e.g., `out/vsphere-linux/`, `out/kvm-windows/`, `out/physical-linux/`) for easier management of multi-platform configurations.
+- **Network configuration uses validated prompts** — IP address, netmask, and gateway fields now validate input and re-prompt with examples (e.g., "Invalid IP address. Example: 192.168.1.100") until valid entry or empty (to keep default).
+
+### Fixed
+- **Static instance-id collision** — fixed hardcoded `iid-cloudseed` in meta-data that would cause cloud-init to skip configuration on subsequent VMs deployed from the same output.
+
+## [1.5.1] - 2026-08-28
 
 ### Added
 - **Interactive module selection with toggle** — new multi-select menu (`_choose_module_multi`) where users toggle modules on/off by number, press `c` to configure selected, `a` for all, `n` for none, `0` to go back. Replaces single-pass selection.

@@ -1,0 +1,11 @@
+#cloud-config
+users:
+  - name: ./cloudseed-out
+    lock_passwd: false
+    passwd: $6$4b565a3b2b874e73$22XxTjJeG6uu2rG2BUbWDeKDb3JmwqKFWkk63hpJtRpQXtK9xLVCzTZn/kPRUCihc8PIlT9XmnLnct3YrycGG1
+    ssh_authorized_keys:
+      - y
+      - n
+      - n
+      - 1
+ssh_pwauth: false

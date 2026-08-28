@@ -275,6 +275,96 @@ def _get_unique_path(out_dir: str, filename: str) -> str | None:
         return None
 
 
+
+def _is_valid_ip(ip: str) -> bool:
+    """Return True if ip is a valid IPv4 address."""
+    parts = ip.split('.')
+    if len(parts) != 4:
+        return False
+    for part in parts:
+        if not part.isdigit():
+            return False
+        num = int(part)
+        if num < 0 or num > 255:
+            return False
+    return True
+
+
+def _is_valid_netmask(mask: str) -> bool:
+    """Return True if mask is a valid IPv4 netmask (contiguous 1s then 0s)."""
+    if not _is_valid_ip(mask):
+        return False
+    parts = mask.split('.')
+    binary = ''.join(f'{int(p):08b}' for p in parts)
+    # No zero after one has been seen (i.e., no '01' pattern)
+    return '01' not in binary
+
+
+def _ask_ip(prompt: str, default: str = "") -> str:
+    """Ask for an IPv4 address, validating input. Returns empty string if user enters empty (to keep default)."""
+    while True:
+        check_shutdown()
+        if default:
+            prompt_text = f"{prompt} [{default}]: "
+        else:
+            prompt_text = f"{prompt}: "
+        val = input(prompt_text).strip()
+        if not val:
+            # User entered empty -> keep default (could be empty)
+            return default
+        if _is_valid_ip(val):
+            return val
+        print_error(f"Invalid IP address. Example: 192.168.1.100")
+
+
+def _ask_netmask(prompt: str, default: str = "") -> str:
+    """Ask for an IPv4 netmask, validating input. Returns empty string if user enters empty."""
+    while True:
+        check_shutdown()
+        if default:
+            prompt_text = f"{prompt} [{default}]: "
+        else:
+            prompt_text = f"{prompt}: "
+        val = input(prompt_text).strip()
+        if not val:
+            return default
+        if _is_valid_netmask(val):
+            return val
+        print_error(f"Invalid netmask. Example: 255.255.255.0")
+
+
+def _ask_gateway(prompt: str, default: str = "") -> str:
+    """Ask for a gateway IP, validating input. Returns empty string if user enters empty."""
+    while True:
+        check_shutdown()
+        if default:
+            prompt_text = f"{prompt} [{default}]: "
+        else:
+            prompt_text = f"{prompt}: "
+        val = input(prompt_text).strip()
+        if not val:
+            return default
+        if _is_valid_ip(val):
+            return val
+        print_error(f"Invalid gateway IP. Example: 192.168.1.1")
+
+
+def _ask_dns(prompt: str, default: str = "") -> str:
+    """Ask for a DNS server IP, validating input. Returns empty string if user enters empty."""
+    while True:
+        check_shutdown()
+        if default:
+            prompt_text = f"{prompt} [{default}]: "
+        else:
+            prompt_text = f"{prompt}: "
+        val = input(prompt_text).strip()
+        if not val:
+            return default
+        if _is_valid_ip(val):
+            return val
+        print_error(f"Invalid DNS IP. Example: 8.8.8.8")
+
+
 def _choose(prompt: str, options: List[str], allow_back: bool = False) -> str:
     """Choose from options. Returns selected option or 'BACK' if back selected."""
     check_shutdown()
@@ -584,9 +674,9 @@ def _configure_network(cfg: TemplateConfig) -> bool:
         cfg.net_mode = _choose("Network mode:", ["dhcp", "static"], allow_back=False).split()[0]
         if cfg.net_mode == "static":
             cfg.net_interface = _ask("Interface name", cfg.net_interface)
-            cfg.net_address = _ask("IP address", cfg.net_address)
-            cfg.net_netmask = _ask("Netmask", cfg.net_netmask)
-            cfg.net_gateway = _ask("Gateway", cfg.net_gateway)
+            cfg.net_address = _ask_ip("IP address", cfg.net_address)
+            cfg.net_netmask = _ask_netmask("Netmask", cfg.net_netmask)
+            cfg.net_gateway = _ask_gateway("Gateway", cfg.net_gateway)
             cfg.net_dns = _ask_list("DNS servers")
             cfg.net_search = _ask_list("DNS search domains (blank=none)")
     return True

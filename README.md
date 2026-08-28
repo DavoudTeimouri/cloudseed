@@ -246,7 +246,7 @@ Checks:
 
 ## Output directory
 
-By default CloudSeed creates `./cloudseed-out/` in the **current working directory**. The directory contains all generated files plus a `README.txt` with apply instructions specific to your configuration.
+By default CloudSeed creates `./cloudseed-out/` in the **current working directory**. Generated files are organized into **platform/OS specific subdirectories** (e.g., `vsphere-linux/`, `kvm-windows/`, `physical-linux/`) for easier management of multi-platform configurations. The directory contains all generated files plus a `README.txt` with apply instructions specific to your configuration.
 
 ## Template creation (Linux + Windows)
 

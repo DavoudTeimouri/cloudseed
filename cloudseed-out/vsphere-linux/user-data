@@ -1,0 +1,23 @@
+#cloud-config
+users:
+  - name: ./cloudseed-out
+    lock_passwd: false
+    passwd: $6$467f8da3f0b917fa$evrXQ9hHLdAy3zgs3oxBM6VLGKsIN6y.ShfVkVxGXNeMV287yt6Mjqi31XdBCjg7qN.C6SAm.R3O94ngduXyE0
+    ssh_authorized_keys:
+      - y
+      - n
+      - n
+      - 1
+disable_root: true
+ssh_pwauth: false
+package_update: true
+package_upgrade: true
+timezone: UTC
+locale: en_US.UTF-8
+keyboard:
+  layout: us
+growpart:
+  mode: auto
+  devices:
+    - /dev/sda1
+final_message: N

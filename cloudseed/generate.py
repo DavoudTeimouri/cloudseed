@@ -6,6 +6,7 @@ Config-only output: no ISO is produced. Minimal YAML emitter (no PyYAML).
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Any, Dict, List
 
 from .model import TemplateConfig
@@ -197,7 +198,9 @@ def _cidr(netmask: str) -> int:
 
 
 def build_meta_data(cfg: TemplateConfig) -> str:
-    lines = ["instance-id: iid-cloudseed",
+    # Generate unique instance-id per config
+    instance_id = f"iid-{uuid.uuid4().hex[:8]}"
+    lines = [f"instance-id: {instance_id}",
              "local-hostname: " + (cfg.hostname or "cloudseed-vm")]
     return "\n".join(lines) + "\n"
 
@@ -611,7 +614,11 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
     import json as _json
     from .cli import validate_config
     from .model import _get_unique_path
-    os.makedirs(out_dir, exist_ok=True)
+    
+    # Organize output by platform/OS: e.g., out_dir/vsphere-linux/, out_dir/kvm-windows/, etc.
+    plat_name = "vsphere" if cfg.platform == "vsphere" else cfg.platform
+    subdir = os.path.join(out_dir, f"{plat_name}-{cfg.os_type}")
+    os.makedirs(subdir, exist_ok=True)
     written: List[str] = []
 
     # Validate and get warnings
@@ -621,7 +628,7 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
         if content == "":
             return
         # Get unique path (handles overwrite/suffix/skip)
-        unique_path = _get_unique_path(out_dir, name)
+        unique_path = _get_unique_path(subdir, name)
         if unique_path is None:
             # User chose to skip
             return

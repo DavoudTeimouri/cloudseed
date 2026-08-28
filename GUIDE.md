@@ -6,19 +6,42 @@ CloudSeed produces **configuration files only** — no seed ISO is built. This g
 
 ## 1. What CloudSeed outputs
 
-**Linux** (`out/`)
+**Output directory structure** — files are organized into platform/OS specific subdirectories:
+
+```
+out/
+├── vsphere-linux/
+│   ├── user-data
+│   ├── meta-data
+│   ├── cloudseed.json
+│   └── README.txt
+├── kvm-windows/
+│   ├── cloudbase-init.conf
+│   ├── cloudbase-init-unattend.conf
+│   ├── sysprep-unattend.xml
+│   ├── run-sysprep.bat
+│   ├── cloudseed.json
+│   └── README.txt
+└── physical-linux/
+    ├── user-data
+    ├── meta-data
+    ├── cloudseed.json
+    └── README.txt
+```
+
+**Linux** (`out/<platform>-linux/`)
 - `user-data` — the cloud-config customization
 - `meta-data` — instance identity (hostname)
 - `cloudseed.json` — the config itself (re-run or tweak later)
 - `README.txt` — quick reference with warnings
 
-**Windows** (`out/`)
+**Windows** (`out/<platform>-windows/`)
 - `cloudbase-init.conf` / `cloudbase-init-unattend.conf` — Cloudbase-Init service config
 - `sysprep-unattend.xml` — Sysprep answer file (generates a **new SID**)
 - `run-sysprep.bat` — runs Sysprep generalize
 - `cloudseed.json`, `README.txt`
 
-**vSphere extras** (when enabled)
+**vSphere extras** (when enabled, in `out/vsphere-<os>/`)
 - `vsphere-customization-spec.xml` — vSphere Guest Customization Specification (XML)
 - `vsphere-pre-script.sh/.bat` — Pre-customization script (runs before cloud-init/Cloudbase-Init)
 - `vsphere-post-script.sh/.bat` — Post-customization script (runs after cloud-init/Cloudbase-Init)
