@@ -5,6 +5,43 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-28
+
+### Added
+- **Template Maker** — new main menu option to prepare the **current machine as a VM template**:
+  - Auto-detects guest OS (`linux`/`windows` via `platform.system()`), virtualization platform (`vsphere`/`kvm`/`physical` via `systemd-detect-virt` + DMI + cloud-init datasource), and admin/root privileges.
+  - **Linux path**: runs `cloud-init clean --machine-id`, removes `/etc/machine-id`, `/var/lib/dbus/machine-id`, `/var/lib/cloud/instance*`, and all `/etc/ssh/ssh_host_*` keys (regenerated on first boot).
+  - **Windows path**: locates `sysprep-unattend.xml` (common paths), executes `sysprep.exe /generalize /oobe /shutdown /unattend:<file>` — VM shuts down with pending generalize; next boot creates fresh SID.
+  - **CloudSeed removal**: uninstalls pip package, deletes binary from `/usr/local/bin`/`/usr/bin`, removes `~/.cloudseed` config directory.
+  - **Full preparation** (option 4): OS-specific clean + CloudSeed removal + `systemctl poweroff` (Linux) or `shutdown /s /t 0` (Windows).
+  - Guardrails: refuses to run on physical hardware, requires root/Administrator, confirms destructive actions.
+
+- **Professional Windows EXE metadata** via PyInstaller `--version-file`:
+  - `version.txt` (VSVersionInfo) supplies `FileVersion=1.1.0.0`, `ProductVersion=1.1.0.0`, `CompanyName=Davoud Teimouri`, `FileDescription="CloudSeed - cloud-init / Cloudbase-Init VM Template Generator"`, `LegalCopyright`, `OriginalFilename=cloudseed.exe`, `ProductName=CloudSeed`.
+  - Visible in Windows Explorer → Properties → Details; enables proper version detection by installers/updaters.
+
+- **Redesigned banner & sub-banner system** (`print_banner`, `print_sub_banner` in `model.py`):
+  - Main banner uses box-drawing (`════`) with fixed 64-col layout: version, tagline, platform list, dependency note, dynamic menu title.
+  - Sub-banners (`─` lines, 60 cols) show section title + one-line description above every module configuration screen.
+  - Consistent visual hierarchy across all menus; no more plain `print("=" * 48)`.
+
+- **Full back-navigation** in interactive flow:
+  - `_choose(prompt, options, allow_back=True)` adds `0) ← Back` entry; returns sentinel `"BACK"`.
+  - `_choose_module(prompt, options, defaults)` multi-select also supports `0` to return to previous step.
+  - Navigation stack: Main Menu → Platform → OS → Module Selection → per-module config; user can back out at any level without restarting.
+
+### Changed
+- **`collect_interactive()` rewritten** as a state machine with nested `while True` loops instead of linear recursion; returns `TemplateConfig` only when configuration is complete.
+- **Module configuration split** into 14 private `_configure_<module>()` functions (hostname, users, ssh, root, network, packages, locale, disk, ntp, files, bootcmd, firstboot, final, sysprep, vsphere_spec, vsphere_scripts). Each prints its own sub-banner and returns `bool` (False = user wants to go back).
+- **Entry points updated**: `toolbox_menu()`, `validator_menu()`, `doctor_menu()`, `template_maker_menu()` now return to main menu via `continue` instead of recursive `collect_interactive()` calls.
+- **README.md** — added Template Maker section with full workflow examples; updated main menu screenshot; documented back-navigation and banner style.
+- **GUIDE.md** — added §14 (Toolbox), §15 (Config Validator with example output), §16 (Cloud-Init Doctor with example output and CI/CD usage), §17–19 (complete workflows), §20 (validate/diagnose after deployment), §21 (banner/menu overview), §22 (graceful shutdown).
+
+### Fixed
+- **Module selection crash** — `_configure_modules` was unpacking `available` as 3-tuple but caller passed 2-tuple `(label, id)`. Removed unused unpacking; module IDs now derived from `cfg.modules` directly.
+- **EOFError in automated test pipe** — `_ask`/`_ask_list`/`_ask_bool` now guard against EOF when stdin is not a TTY (returns default).
+- **PyInstaller icon warning on Linux** — `--icon` still passed but PyInstaller emits “Ignoring icon; supported only on Windows and macOS!” — harmless, binary works.
+
 ## [1.1.0] - 2026-08-28
 
 ### Added
@@ -28,8 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Output directory default** now `./cloudseed-out` in current working directory (was ambiguous).
-- **collect_interactive()** returns `TemplateConfig` or `int` (submenu exit code); CLI handles both.
-- **generate_all()** accepts `interactive` flag to control overwrite prompts (batch mode skips prompts).
+- **`collect_interactive()`** returns `TemplateConfig` or `int` (submenu exit code); CLI handles both.
+- **`generate_all()`** accepts `interactive` flag to control overwrite prompts (batch mode skips prompts).
 - **README.md** — added Toolbox, Config Validator, Cloud-Init Doctor sections; updated module tables; added overwrite protection note; added SID Changer workaround docs.
 - **GUIDE.md** — added complete workflows for Toolbox (SID Changer), Config Validator (with example output), Cloud-Init Doctor (with example output and CI/CD usage); added banner/menu overview; added graceful shutdown note.
 
