@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Empty user-data when skipping module config** — previously if user accepted all defaults without per-module config, user-data was empty. Now all selected modules are configured sequentially with defaults applied.
 - **Module configuration order** — each selected module's `_configure_*()` runs in defined order; user can go back from any sub-menu to module selection.
+- **`AttributeError: module 'os' has no attribute 'geteuid'` on Windows** — `write_to_cloud_init_path()` and `check_root()` now guard with `platform.system()` check before calling `os.geteuid()`; Windows uses `ctypes.windll.shell32.IsUserAnAdmin()` instead.
+- **Interactive prompt for `--write-to-cloud-init-path` removed from configuration flow** — the prompt "Write user-data directly to /etc/cloud/cloud.cfg.d/99-cloudseed.cfg?" was incorrectly shown during interactive config generation; now only triggers via explicit `--write-to-cloud-init-path` CLI flag (Linux only, requires root).
+
+## [1.5.1] - 2026-08-28
+
+### Fixed
+- **`AttributeError: module 'os' has no attribute 'geteuid'` on Windows (PyInstaller binary)** — `cli.write_to_cloud_init_path()` and `templatemaker.check_root()` now check `platform.system()` before calling `os.geteuid()`; Windows path uses `ctypes.windll.shell32.IsUserAnAdmin()`.
+- **Removed interactive prompt for cloud-init path write during config generation** — the prompt was incorrectly shown at end of interactive flow; now only available via explicit `--write-to-cloud-init-path` CLI flag (Linux only, requires sudo).
+- **Windows compatibility for `--write-to-cloud-init-path` flag** — flag now prints "Error: --write-to-cloud-init-path is Linux only" on Windows instead of crashing.
 
 ## [1.4.0] - 2026-08-28
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import signal
 import sys
 import subprocess
@@ -105,7 +106,10 @@ def get_cloud_init_compatibility(version_str: str) -> str:
 
 
 def write_to_cloud_init_path(cfg: TemplateConfig) -> bool:
-    """Write user-data directly to /etc/cloud/cloud.cfg.d/99-cloudseed.cfg. Requires root."""
+    """Write user-data directly to /etc/cloud/cloud.cfg.d/99-cloudseed.cfg. Requires root (Linux only)."""
+    if platform.system().lower() == "windows":
+        print("Error: --write-to-cloud-init-path is Linux only")
+        return False
     if os.geteuid() != 0:
         print("Error: Requires root (run with sudo)")
         return False
@@ -180,12 +184,6 @@ def run_interactive(out_dir: str, plaintext: bool = False,
             print("Error: --write-to-cloud-init-path only works for Linux configs")
             return 1
         return 0 if write_to_cloud_init_path(cfg) else 1
-
-    # Ask if user wants to write to cloud-init path (Linux only)
-    if cfg.os_type == "linux" and not write_cloud_init_path:
-        write_direct = input("\nWrite user-data directly to /etc/cloud/cloud.cfg.d/99-cloudseed.cfg? (requires sudo) [y/N]: ").strip().lower()
-        if write_direct in ("y", "yes"):
-            return 0 if write_to_cloud_init_path(cfg) else 1
 
     written = generate_all(cfg, out_dir, interactive=True)
     _print_generated(written)
