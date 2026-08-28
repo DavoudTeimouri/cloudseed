@@ -33,13 +33,23 @@ python -m cloudseed
 
 ## Usage
 
-Interactive menu:
+**Main Menu** (new in v1.1.0):
 
 ```bash
 cloudseed            # or: python -m cloudseed
 ```
 
-Non-interactive (batch) — feed config as JSON:
+Shows: Generate Configuration | Toolbox (External Tools) | Config Validator | Cloud-Init Doctor | Exit
+
+**Generate Configuration** (interactive menu):
+1. Pick target platform: **vSphere (VMware)**, **KVM (libvirt)**, or **Physical / Other**
+2. Pick OS: **Linux** or **Windows**
+3. Multi-select cloud-init / Cloudbase-Init **modules** (all recommended by default; deselect any)
+4. For each selected module, defaults are shown — press Enter to accept or type an override
+5. Choose output directory (created in current path if not exists)
+6. Files generated + apply instructions printed (see GUIDE.md)
+
+**Non-interactive (batch)** — feed config as JSON:
 
 ```bash
 cloudseed --json config.json --out ./out
@@ -50,14 +60,23 @@ This writes (config-only, no ISO):
 - **Windows**: `cloudbase-init.conf`, `cloudbase-init-unattend.conf`, `sysprep-unattend.xml`, `run-sysprep.bat`, `cloudseed.json`, `README.txt`
 - **vSphere extras**: `vsphere-customization-spec.xml`, `vsphere-pre-script.sh/.bat`, `vsphere-post-script.sh/.bat`
 
-## Interactive menu flow
+**Toolbox** — external tools:
+- Download SID Changer (Windows — change SID without Sysprep)
+- Run SID Changer (Windows — must be Administrator)
 
-1. Pick target platform: **vSphere (VMware)**, **KVM (libvirt)**, or **Physical / Other**
-2. Pick OS: **Linux** or **Windows**
-3. Multi-select cloud-init / Cloudbase-Init **modules** (all recommended by default; deselect any)
-4. For each selected module, defaults are shown — press Enter to accept or type an override
-5. Choose output directory (created in current path if not exists)
-6. Files generated + apply instructions printed (see GUIDE.md)
+**Config Validator** — validate exported configs:
+- Check configs won't re-run after first boot
+- Verify cloudseed.json consistency
+- Validate Windows Sysprep/Cloudbase-Init files
+
+**Cloud-Init Doctor** — diagnose cloud-init on running systems:
+- Full diagnosis (all checks)
+- Cloud-init status & version
+- Cloud-init configuration
+- Boot & service status
+- Network configuration
+- Disk space
+- Save diagnosis report (JSON)
 
 ## Supported modules (all configurations)
 
@@ -101,12 +120,13 @@ This writes (config-only, no ISO):
 - **Passwords are hashed by default** with a `$6$` SHA-512 crypt hash (cloud-init rejects plaintext). Resolution: host `crypt()` → `openssl passwd -6` → pure-stdlib fallback. Use `--plaintext-password` to emit plaintext (discouraged).
 - **No ISO** is produced — CloudSeed is config-only. Full apply steps in [GUIDE.md](GUIDE.md).
 - **Conflict avoidance**: Enable "Let Platform Handle..." modules to let vSphere/KVM manage hostname/network/NTP instead of cloud-init, avoiding duplicate configuration.
+- **Overwrite protection**: If output file exists, CloudSeed asks: Overwrite / Add suffix / Skip.
 
 ## Command-line flags
 
 | Flag | Effect |
 |------|--------|
-| *(none)* | Interactive menu (platform → OS → modules → per-module overrides). |
+| *(none)* | Interactive menu (Main Menu → Generate Configuration → platform → OS → modules → per-module overrides). |
 | `--json FILE` | Batch mode: read a saved config and generate files. No prompts. |
 | `--out DIR` | Output directory (default `./cloudseed-out` in current path). |
 | `--plaintext-password` | Emit the password verbatim instead of a `$6$` SHA-512 hash. Discouraged — cloud-init rejects plaintext on most images. |
@@ -193,6 +213,35 @@ CloudSeed validates your configuration and emits warnings:
 
 Warnings are printed during interactive/batch mode and also written to the output `README.txt`.
 
+## Config Validator (v1.1.0+)
+
+Validate exported configurations **after generation** or on existing config directories:
+
+```bash
+cloudseed  # Main Menu → Config Validator → Validate a config directory
+```
+
+Checks:
+- **No persistent runs**: `runcmd` (per-instance), `bootcmd` (every boot), `phone_home`, package update/upgrade
+- **cloudseed.json consistency**: required fields, module/file matching
+- **Windows**: sysprep-unattend.xml (generalize/specialize/oobe passes), Cloudbase-Init configs
+
+## Cloud-Init Doctor (v1.1.0+)
+
+Diagnose cloud-init issues on a **running system** (requires cloud-init installed locally):
+
+```bash
+cloudseed  # Main Menu → Cloud-Init Doctor → Full Diagnosis
+```
+
+Checks:
+- **Cloud-init status**: version, enabled, running, stage completion (generator, local, network, config, final)
+- **Configuration**: merged config query, config file locations
+- **Boot & services**: systemd status for all cloud-init services, failed units
+- **Network**: netplan, networkd, current interfaces
+- **Disk space**: df output with low-space warnings
+- **Save report**: JSON output for CI/CD integration
+
 ## Output directory
 
 By default CloudSeed creates `./cloudseed-out/` in the **current working directory**. The directory contains all generated files plus a `README.txt` with apply instructions specific to your configuration.
@@ -205,6 +254,21 @@ For creating a golden image / template:
 3. **Linux**: `sudo cloud-init clean --machine-id` then shutdown
 4. **Windows**: run `run-sysprep.bat` (as Administrator) — VM shuts down with generalized state
 5. Convert VM to template / clone — each clone gets fresh identity
+
+## Windows SID Change without Sysprep (Toolbox)
+
+Alternative to Sysprep for already-cloned Windows VMs:
+
+```bash
+cloudseed  # Main Menu → Toolbox → Download SID Changer
+```
+
+- Downloads `sidchanger.exe` (from stratus/sidchanger)
+- Copy to target Windows VM
+- Run as Administrator: `sidchanger.exe`
+- Reboot — Machine SID changed without full Sysprep
+
+**Warning**: Only use on cloned VMs that were NOT sysprepped. This is a workaround, not a replacement for proper image preparation.
 
 ## License
 

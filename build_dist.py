@@ -18,6 +18,7 @@ import os
 
 def main() -> int:
     icon_path = "cloudseed.ico" if os.path.exists("cloudseed.ico") else None
+    version_file = "version.txt" if os.path.exists("version.txt") and sys.platform == "win32" else None
     
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -28,11 +29,12 @@ def main() -> int:
     ]
     
     # Add icon for Windows
-    if icon_path and sys.platform == "win32":
+    if icon_path:
         cmd.extend(["--icon", icon_path])
-    elif icon_path and os.name != "nt":
-        # On Linux, we can still embed the icon for cross-compilation scenarios
-        cmd.extend(["--icon", icon_path])
+    
+    # Add version info for Windows EXE
+    if version_file:
+        cmd.extend(["--version-file", version_file])
     
     cmd.append("cloudseed/__main__.py")
     

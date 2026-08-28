@@ -289,7 +289,112 @@ The binary is fully self-contained and runs the same menu on Windows and Linux.
 
 ---
 
-## 14. Complete workflow: Create a template VM (Linux)
+## 14. Toolbox — External Tools (v1.1.0+)
+
+### Windows SID Change without Sysprep
+
+Alternative to Sysprep for already-cloned Windows VMs:
+
+```bash
+cloudseed  # Main Menu → Toolbox → Download SID Changer
+```
+
+- Downloads `sidchanger.exe` (from stratus/sidchanger)
+- Copy to target Windows VM
+- Run as Administrator: `sidchanger.exe`
+- Reboot — Machine SID changed without full Sysprep
+
+**Warning**: Only use on cloned VMs that were NOT sysprepped. This is a workaround, not a replacement for proper image preparation.
+
+---
+
+## 15. Config Validator (v1.1.0+)
+
+Validate exported configurations **after generation** or on existing config directories:
+
+```bash
+cloudseed  # Main Menu → Config Validator → Validate a config directory
+```
+
+Checks:
+- **No persistent runs**: `runcmd` (per-instance), `bootcmd` (every boot), `phone_home`, package update/upgrade
+- **cloudseed.json consistency**: required fields, module/file matching
+- **Windows**: sysprep-unattend.xml (generalize/specialize/oobe passes), Cloudbase-Init configs
+
+### Example: Validate a config directory
+
+```bash
+$ cloudseed
+# Select: Config Validator
+# Select: Validate a config directory
+# Enter path: ./cloudseed-out
+
+Validating: ./cloudseed-out
+==========================
+DIAGNOSIS SUMMARY
+==========================
+Cloud-init: 24.1 (✅ Fully supported (all modules))
+Status: done
+Errors: 0
+Warnings: 2
+==========================
+⚠️  WARNINGS:
+  - [cloud_init] runcmd present - commands run on first boot only (per-instance). Verify they are idempotent.
+  - [cloud_init] NTP configured in cloud-init - may conflict with platform/OS NTP. Consider 'Let Platform Handle NTP'.
+```
+
+---
+
+## 16. Cloud-Init Doctor (v1.1.0+)
+
+Diagnose cloud-init issues on a **running system** (requires cloud-init installed locally):
+
+```bash
+cloudseed  # Main Menu → Cloud-Init Doctor → Full Diagnosis
+```
+
+Checks:
+- **Cloud-init status**: version, enabled, running, stage completion (generator, local, network, config, final)
+- **Configuration**: merged config query, config file locations
+- **Boot & services**: systemd status for all cloud-init services, failed units
+- **Network**: netplan, networkd, current interfaces
+- **Disk space**: df output with low-space warnings
+- **Save report**: JSON output for CI/CD integration
+
+### Example: Full diagnosis output
+
+```bash
+$ cloudseed
+# Select: Cloud-Init Doctor
+# Select: Full Diagnosis
+
+Running comprehensive cloud-init health check...
+============================================================
+DIAGNOSIS SUMMARY
+============================================================
+Timestamp: 2026-08-28T10:30:45.123456
+Platform: Linux-6.8.0-138-generic-x86_64-with-glibc2.39
+Cloud-init: 24.1 (✅ Fully supported (all modules))
+Status: done
+Errors: 0
+Warnings: 1
+============================================================
+⚠️  WARNINGS:
+  - [cloud_init] cloud-init analyze show failed: cloud-init analyze not available
+```
+
+### Save diagnosis report for CI/CD
+
+```bash
+# Select: Save Diagnosis Report (JSON)
+# Output: cloudseed-doctor-20260828-103045.json
+```
+
+The JSON report contains all checks for automated processing.
+
+---
+
+## 17. Complete workflow: Create a template VM (Linux)
 
 ```bash
 # 1. Generate config
@@ -315,7 +420,7 @@ ssh admin@<vm-ip> "sudo cloud-init clean --machine-id && sudo shutdown -h now"
 
 ---
 
-## 15. Complete workflow: Create a template VM (Windows)
+## 18. Complete workflow: Create a template VM (Windows)
 
 ```bash
 # 1. Generate config
@@ -338,7 +443,7 @@ cloudseed
 
 ---
 
-## 16. Complete workflow: vSphere with Guest Customization Spec (NEW)
+## 19. Complete workflow: vSphere with Guest Customization Spec (NEW)
 
 ```bash
 # 1. Generate config with vSphere modules:
@@ -364,3 +469,64 @@ cloudseed
 # 5. Each deployed VM gets: unique hostname, correct network, synced time,
 #    plus cloud-init user/packages/scripts
 ```
+
+---
+
+## 20. Complete workflow: Validate and diagnose after deployment
+
+```bash
+# After deploying VMs, validate the generated config was applied correctly:
+
+# 1. On the running VM, run Cloud-Init Doctor:
+cloudseed  # Main Menu → Cloud-Init Doctor → Full Diagnosis
+
+# 2. Or save report for centralized monitoring:
+#    Main Menu → Cloud-Init Doctor → Save Diagnosis Report (JSON)
+#    Upload cloudseed-doctor-*.json to your monitoring system
+
+# 3. For CI/CD pipelines, run validator on generated configs:
+cloudseed  # Main Menu → Config Validator → Validate a config directory
+# Checks that configs won't re-run unexpectedly after first boot
+```
+
+---
+
+## 21. Banner and Menu Overview (v1.1.0+)
+
+All menus display a consistent banner:
+
+```
+============================================================
+  CloudSeed v1.1.0
+  cloud-init / Cloudbase-Init VM Template Generator
+  Main Menu
+============================================================
+
+  1) Generate Configuration
+  2) Toolbox (External Tools)
+  3) Config Validator
+  4) Cloud-Init Doctor
+  5) Exit
+```
+
+Each sub-menu shows:
+- **Title** in banner (e.g., "Module Selection", "Network Configuration")
+- **Description** of what the menu does
+- **Default values** in [brackets]
+- **Numbered options** for easy selection
+
+---
+
+## 22. Graceful shutdown
+
+Press `Ctrl+C` at any prompt to exit cleanly:
+
+```
+[CloudSeed] Interrupted. Shutting down gracefully...
+```
+
+---
+
+## License
+
+MIT

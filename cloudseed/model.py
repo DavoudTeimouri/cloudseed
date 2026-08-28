@@ -40,14 +40,26 @@ def check_shutdown():
 def print_banner(title: str = "") -> None:
     """Print CloudSeed banner with version and description."""
     from . import __version__
-    print("\n" + "=" * 64)
+    width = 64
+    line = "═" * width
+    print(f"\n{line}")
     print(f"  CloudSeed v{__version__}")
-    print("  Cloud-init / Cloudbase-Init VM Template Generator")
-    print("  Config-only (no ISO) for vSphere, KVM, Physical")
-    print("  Zero dependencies — Python stdlib only")
+    print(f"  ║  cloud-init / Cloudbase-Init VM Template Generator  ║")
+    print(f"  ║  Config-only (no ISO) · vSphere · KVM · Physical    ║")
+    print(f"  ║  Zero dependencies — Python stdlib only             ║")
     if title:
-        print(f"  {title}")
-    print("=" * 64 + "\n")
+        print(f"  ║  {title:<54} ║")
+    print(f"{line}\n")
+
+
+def print_sub_banner(title: str, description: str = "") -> None:
+    """Print a sub-menu banner with title and optional description."""
+    width = 60
+    line = "─" * width
+    print(f"\n  {title}")
+    if description:
+        print(f"  {description}")
+    print(f"  {line}\n")
 
 
 @dataclass
@@ -223,19 +235,52 @@ def _get_unique_path(out_dir: str, filename: str) -> str | None:
         return None
 
 
-def _choose(prompt: str, options: List[str]) -> str:
+def _choose(prompt: str, options: List[str], allow_back: bool = False) -> str:
+    """Choose from options. Returns selected option or 'BACK' if back selected."""
     check_shutdown()
-    print_banner(prompt)
+    print_sub_banner(prompt)
     for i, opt in enumerate(options, 1):
         print(f"  {i}) {opt}")
+    if allow_back:
+        print(f"  0) ← Back")
     while True:
         check_shutdown()
-        raw = input("Select [1]: ").strip()
+        if allow_back:
+            raw = input("Select [1]: ").strip()
+        else:
+            raw = input("Select [1]: ").strip()
         if not raw:
             return options[0]
+        if allow_back and raw == "0":
+            return "BACK"
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1]
         print("Invalid selection, try again.")
+
+
+def _choose_module(prompt: str, options: List[str], defaults: List[str]) -> List[str]:
+    """Multi-select for modules with back option."""
+    check_shutdown()
+    print_sub_banner(prompt, "Space-separated numbers, 'a' for all, Enter for defaults, 0 to go back")
+    for i, opt in enumerate(options, 1):
+        default_marker = " ✓" if opt in defaults else ""
+        print(f"  {i}) {opt}{default_marker}")
+    print("  0) ← Back")
+    while True:
+        check_shutdown()
+        sel = input("\nSelection: ").strip().lower()
+        if not sel:
+            return defaults
+        if sel == "0":
+            return "BACK"
+        if sel == "a":
+            return options
+        try:
+            idxs = [int(x) for x in sel.split() if x.isdigit()]
+            chosen = {options[i - 1] for i in idxs if 1 <= i <= len(options)}
+            return [m for m in defaults if m in chosen] + [m for m in chosen if m not in defaults]
+        except (ValueError, IndexError):
+            print("Invalid selection, try again.")
 
 
 def collect_interactive() -> TemplateConfig:
@@ -249,187 +294,303 @@ def collect_interactive() -> TemplateConfig:
     cloud_init_available = cloud_init_version != "not found"
     
     cfg = TemplateConfig()
-    print_banner("Main Menu")
+    
+    while True:  # Main loop - allows returning to main menu
+        print_banner("Main Menu")
+        
+        # Main action menu
+        main_actions = [
+            "Generate Configuration",
+            "Toolbox (External Tools)",
+            "Config Validator",
+            "Cloud-Init Doctor",
+            "Template Maker (Prepare Current Machine as Template)",
+            "Exit",
+        ]
+        action = _choose("Select action:", main_actions)
+        
+        if action == "Toolbox (External Tools)":
+            from .toolbox import toolbox_menu
+            toolbox_menu()
+            continue  # Return to main menu
+        elif action == "Config Validator":
+            from .validator import validator_menu
+            validator_menu()
+            continue
+        elif action == "Cloud-Init Doctor":
+            from .doctor import doctor_menu
+            doctor_menu()
+            continue
+        elif action == "Template Maker (Prepare Current Machine as Template)":
+            from .templatemaker import template_maker_menu
+            template_maker_menu()
+            continue
+        elif action == "Exit":
+            print("Goodbye!")
+            sys.exit(0)
+        
+        # Generate Configuration flow with back navigation
+        while True:
+            platform_choice = _choose("Target platform:", ["vSphere (VMware)", "KVM (libvirt)", "Physical / Other"], allow_back=True)
+            if platform_choice == "BACK":
+                break  # Back to main menu
+            cfg.platform = platform_choice.split()[0].lower()
+            if cfg.platform == "physical / other":
+                cfg.platform = "physical"
+            
+            os_choice = _choose("Guest OS:", ["Linux", "Windows"], allow_back=True)
+            if os_choice == "BACK":
+                continue  # Back to platform selection
+            cfg.os_type = os_choice.split()[0].lower()
+            
+            # Module selection with back
+            available = [(mid, lbl) for (mid, lbl, oses) in MODULES if cfg.os_type in oses]
+            
+            # Warn if cloud-init not available but Linux selected
+            if cfg.os_type == "linux" and not cloud_init_available:
+                print(f"\n⚠️  WARNING: cloud-init not found on this system!")
+                print("  Generated configs require cloud-init on the TARGET VM, not this build machine.")
+                print("  This is OK if you're building configs for another VM.")
+                print("  Some features (Config Validator, Cloud-Init Doctor) need cloud-init locally.")
+                print()
+            
+            module_options = [lbl for (mid, lbl) in available]
+            module_ids = [mid for (mid, lbl) in available]
+            defaults = module_ids  # all recommended by default
+            
+            while True:
+                selected_modules = _choose_module("Module Selection", module_options, defaults)
+                if selected_modules == "BACK":
+                    break  # Back to OS selection
+                cfg.modules = selected_modules
+                
+                # Now configure each module
+                if _configure_modules(cfg, available):
+                    return cfg  # Success - exit the function
+                else:
+                    # User chose to go back from module configuration
+                    continue
+        
+        # If we get here, user went back to main menu
+        continue
 
-    # Main action menu
-    main_actions = [
-        "Generate Configuration",
-        "Toolbox (External Tools)",
-        "Config Validator",
-        "Cloud-Init Doctor",
-        "Exit",
-    ]
-    action = _choose("Select action:", main_actions)
-    
-    if action == "Toolbox (External Tools)":
-        from .toolbox import toolbox_menu
-        toolbox_menu()
-        return collect_interactive()  # Return to main menu after
-    elif action == "Config Validator":
-        from .validator import validator_menu
-        validator_menu()
-        return collect_interactive()  # Return to main menu after
-    elif action == "Cloud-Init Doctor":
-        from .doctor import doctor_menu
-        doctor_menu()
-        return collect_interactive()  # Return to main menu after
-    elif action == "Exit":
-        print("Goodbye!")
-        sys.exit(0)
-    
-    # Continue with Generate Configuration
-    cfg.platform = _choose(
-        "Target platform:", ["vSphere (VMware)", "KVM (libvirt)", "Physical / Other"]
-    ).split()[0].lower()
-    if cfg.platform == "physical / other":
-        cfg.platform = "physical"
-    cfg.os_type = _choose("Guest OS:", ["Linux", "Windows"]).split()[0].lower()
 
-    # Filter modules based on cloud-init availability
-    available = [(mid, lbl) for (mid, lbl, oses) in MODULES if cfg.os_type in oses]
+def _configure_modules(cfg: TemplateConfig, available: List[tuple]) -> bool:
+    """Configure all selected modules. Returns True if complete, False if user wants to go back."""
     
-    # Warn if cloud-init not available but Linux selected
-    if cfg.os_type == "linux" and not cloud_init_available:
-        print(f"\n⚠️  WARNING: cloud-init not found on this system!")
-        print("  Generated configs require cloud-init on the TARGET VM, not this build machine.")
-        print("  This is OK if you're building configs for another VM.")
-        print("  Some features (Config Validator, Cloud-Init Doctor) need cloud-init locally.")
-        print()
-    
-    print_banner("Module Selection")
-    print("Available customization modules (defaults preselected):")
-    defaults = [m[0] for m in available]  # all recommended by default
-    for i, (mid, lbl) in enumerate(available, 1):
-        print(f"  {i}) {lbl}")
-    sel = input(
-        "\nModules to include (space-separated numbers, 'a' all, Enter=all): "
-    ).strip().lower()
-    check_shutdown()
-    if sel in ("", "a"):
-        cfg.modules = list(defaults)
-    else:
-        idxs = [int(x) for x in sel.split() if x.isdigit()]
-        chosen = {available[i - 1][0] for i in idxs if 1 <= i <= len(available)}
-        cfg.modules = [m for m in defaults if m in chosen] + [m for m in chosen if m not in defaults]
-
     # Hostname settings
     if cfg.has("hostname") or cfg.has("platform_hostname"):
-        print_banner("Hostname Configuration")
-        cfg.use_platform_hostname = _ask_bool("Let platform (vSphere/KVM) set hostname", cfg.use_platform_hostname)
-        if not cfg.use_platform_hostname:
-            cfg.hostname_prefix = _ask("Hostname prefix", cfg.hostname_prefix)
-            cfg.hostname = _ask("Hostname (blank = auto-generate from prefix)", cfg.hostname)
-
+        if not _configure_hostname(cfg):
+            return False
+    
     if cfg.has("users"):
-        print_banner("User Configuration")
-        cfg.username = _ask("Username", cfg.username)
-        cfg.password = _ask("Password (plaintext; document risk!)", cfg.password)
-        cfg.sudo = _ask_bool("Grant sudo (Linux)", cfg.sudo)
-        cfg.lock_password = _ask_bool("Lock password (key-only login)", cfg.lock_password)
-        cfg.ssh_pwauth = _ask_bool("Allow SSH password auth", cfg.ssh_pwauth)
-
+        if not _configure_users(cfg):
+            return False
+    
     if cfg.has("ssh"):
-        print_banner("SSH Configuration")
-        cfg.ssh_keys = _ask_list("SSH public keys (ssh-rsa / ssh-ed25519 ...)")
-
+        if not _configure_ssh(cfg):
+            return False
+    
     if cfg.has("root"):
-        print_banner("Root Hardening")
-        cfg.disable_root = _ask_bool("Disable root SSH login", cfg.disable_root)
-
+        if not _configure_root(cfg):
+            return False
+    
     if cfg.has("network") or cfg.has("platform_network"):
-        print_banner("Network Configuration")
-        cfg.let_platform_handle_network = _ask_bool("Let platform handle network (avoid conflicts with cloud-init)", cfg.let_platform_handle_network)
-        if not cfg.let_platform_handle_network:
-            cfg.net_mode = _choose("Network mode:", ["dhcp", "static"]).split()[0]
-            if cfg.net_mode == "static":
-                cfg.net_interface = _ask("Interface name", cfg.net_interface)
-                cfg.net_address = _ask("IP address", cfg.net_address)
-                cfg.net_netmask = _ask("Netmask", cfg.net_netmask)
-                cfg.net_gateway = _ask("Gateway", cfg.net_gateway)
-                cfg.net_dns = _ask_list("DNS servers")
-                cfg.net_search = _ask_list("DNS search domains (blank=none)")
-
+        if not _configure_network(cfg):
+            return False
+    
     if cfg.has("packages"):
-        print_banner("Package Configuration")
-        cfg.package_upgrade = _ask_bool("Upgrade packages on first boot", cfg.package_upgrade)
-        cfg.packages = _ask_list("Packages to install (blank=none)")
-
+        if not _configure_packages(cfg):
+            return False
+    
     if cfg.has("locale"):
-        print_banner("Locale & Timezone")
-        cfg.timezone = _ask("Timezone", cfg.timezone)
-        cfg.locale = _ask("Locale", cfg.locale)
-        cfg.keyboard_layout = _ask("Keyboard layout", cfg.keyboard_layout)
-
+        if not _configure_locale(cfg):
+            return False
+    
     if cfg.has("disk"):
-        print_banner("Disk Configuration")
-        cfg.grow_device = _ask("Grow device", cfg.grow_device)
-        cfg.grow_partition = _ask("Partition number", cfg.grow_partition)
-
+        if not _configure_disk(cfg):
+            return False
+    
     if cfg.has("ntp") or cfg.has("platform_ntp"):
-        print_banner("NTP Configuration")
-        cfg.let_platform_handle_ntp = _ask_bool("Let platform handle NTP", cfg.let_platform_handle_ntp)
-        if not cfg.let_platform_handle_ntp:
-            cfg.ntp_servers = _ask_list("NTP servers")
-            if not cfg.ntp_servers:
-                cfg.ntp_servers = ["pool.ntp.org"]
-
+        if not _configure_ntp(cfg):
+            return False
+    
     if cfg.has("files"):
-        print_banner("Write Files")
-        print("Write files: for each, give path then content (blank path ends).")
-        while True:
-            check_shutdown()
-            p = input("  file path (blank to stop): ").strip()
-            if not p:
-                break
-            c = input("  file content: ").strip()
-            perm = input("  permissions [0644]: ").strip() or "0644"
-            cfg.write_files.append({"path": p, "content": c, "permissions": perm})
-
+        if not _configure_files(cfg):
+            return False
+    
     if cfg.has("bootcmd"):
-        print_banner("Early Boot Commands")
-        cfg.bootcmd = _ask_list("bootcmd (early boot commands)")
-
+        if not _configure_bootcmd(cfg):
+            return False
+    
     if cfg.has("firstboot"):
-        print_banner("First-Boot Commands")
-        cfg.firstboot = _ask_list("First-boot commands (runcmd)")
-
+        if not _configure_firstboot(cfg):
+            return False
+    
     if cfg.has("final"):
-        print_banner("Final Message")
-        cfg.final_message = _ask("Final message", cfg.final_message)
-
+        if not _configure_final(cfg):
+            return False
+    
     if cfg.has("sysprep"):
-        print_banner("Windows Sysprep")
-        cfg.sysprep = _ask_bool("Run Sysprep generalize (new SID)", cfg.sysprep)
-        if cfg.sysprep:
-            cfg.sysprep_unattended = _ask_bool("Fully unattended (like vSphere Guest Customization)", cfg.sysprep_unattended)
-            cfg.sysprep_organization = _ask("Organization", cfg.sysprep_organization)
-            cfg.sysprep_owner = _ask("Owner", cfg.sysprep_owner)
-            cfg.sysprep_computer_prefix = _ask("Computer-name prefix", cfg.sysprep_computer_prefix)
-            cfg.sysprep_timezone = _ask("Timezone", cfg.sysprep_timezone)
-            cfg.sysprep_locale = _ask("Locale (UI)", cfg.sysprep_locale)
-            cfg.sysprep_product_key = input("Product key (blank=skip): ").strip()
-            check_shutdown()
-
+        if not _configure_sysprep(cfg):
+            return False
+    
     # vSphere Customization Spec
     if cfg.has("vsphere_spec") and cfg.platform == "vsphere":
-        print_banner("vSphere Customization Spec Export")
-        cfg.export_vsphere_spec = _ask_bool("Export vSphere Customization Spec (XML)", cfg.export_vsphere_spec)
-        if cfg.export_vsphere_spec:
-            cfg.vsphere_spec_name = _ask("Spec name", cfg.vsphere_spec_name)
-
+        if not _configure_vsphere_spec(cfg):
+            return False
+    
     # vSphere Pre/Post Customization Scripts
     if cfg.has("vsphere_scripts") and cfg.platform == "vsphere":
-        print_banner("vSphere Pre/Post Customization Scripts")
-        cfg.use_sample_scripts = _ask_bool("Use sample scripts (customizable)", cfg.use_sample_scripts)
-        if cfg.use_sample_scripts:
-            print("\nSample Pre-customization script (runs before cloud-init):")
-            print("# Example: Register with Satellite, install agents, etc.")
-            cfg.vsphere_pre_script = _ask("Pre-customization script (blank to skip)", "")
-            print("\nSample Post-customization script (runs after cloud-init):")
-            print("# Example: Join domain, run compliance checks, etc.")
-            cfg.vsphere_post_script = _ask("Post-customization script (blank to skip)", "")
+        if not _configure_vsphere_scripts(cfg):
+            return False
+    
+    return True
 
-    return cfg
+
+def _configure_hostname(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Hostname Configuration", "Configure how the VM hostname is set")
+    cfg.use_platform_hostname = _ask_bool("Let platform (vSphere/KVM) set hostname", cfg.use_platform_hostname)
+    if not cfg.use_platform_hostname:
+        cfg.hostname_prefix = _ask("Hostname prefix", cfg.hostname_prefix)
+        cfg.hostname = _ask("Hostname (blank = auto-generate from prefix)", cfg.hostname)
+    return True
+
+
+def _configure_users(cfg: TemplateConfig) -> bool:
+    print_sub_banner("User Configuration", "Create admin user with password and sudo/Administrators access")
+    cfg.username = _ask("Username", cfg.username)
+    cfg.password = _ask("Password (plaintext; document risk!)", cfg.password)
+    cfg.sudo = _ask_bool("Grant sudo (Linux) / Administrators (Windows)", cfg.sudo)
+    cfg.lock_password = _ask_bool("Lock password (key-only login)", cfg.lock_password)
+    cfg.ssh_pwauth = _ask_bool("Allow SSH password auth", cfg.ssh_pwauth)
+    return True
+
+
+def _configure_ssh(cfg: TemplateConfig) -> bool:
+    print_sub_banner("SSH Configuration", "Add SSH authorized keys (one per line)")
+    cfg.ssh_keys = _ask_list("SSH public keys (ssh-rsa / ssh-ed25519 ...)")
+    return True
+
+
+def _configure_root(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Root Hardening", "Disable root SSH login")
+    cfg.disable_root = _ask_bool("Disable root SSH login", cfg.disable_root)
+    return True
+
+
+def _configure_network(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Network Configuration", "Configure network - DHCP or static IP with DNS")
+    cfg.let_platform_handle_network = _ask_bool("Let platform handle network (avoid conflicts with cloud-init)", cfg.let_platform_handle_network)
+    if not cfg.let_platform_handle_network:
+        cfg.net_mode = _choose("Network mode:", ["dhcp", "static"], allow_back=False).split()[0]
+        if cfg.net_mode == "static":
+            cfg.net_interface = _ask("Interface name", cfg.net_interface)
+            cfg.net_address = _ask("IP address", cfg.net_address)
+            cfg.net_netmask = _ask("Netmask", cfg.net_netmask)
+            cfg.net_gateway = _ask("Gateway", cfg.net_gateway)
+            cfg.net_dns = _ask_list("DNS servers")
+            cfg.net_search = _ask_list("DNS search domains (blank=none)")
+    return True
+
+
+def _configure_packages(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Package Configuration", "Install packages and optionally upgrade on first boot")
+    cfg.package_upgrade = _ask_bool("Upgrade packages on first boot", cfg.package_upgrade)
+    cfg.packages = _ask_list("Packages to install (blank=none)")
+    return True
+
+
+def _configure_locale(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Locale & Timezone", "Set timezone, locale, and keyboard layout")
+    cfg.timezone = _ask("Timezone", cfg.timezone)
+    cfg.locale = _ask("Locale", cfg.locale)
+    cfg.keyboard_layout = _ask("Keyboard layout", cfg.keyboard_layout)
+    return True
+
+
+def _configure_disk(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Disk Configuration", "Grow root filesystem on first boot")
+    cfg.grow_device = _ask("Grow device", cfg.grow_device)
+    cfg.grow_partition = _ask("Partition number", cfg.grow_partition)
+    return True
+
+
+def _configure_ntp(cfg: TemplateConfig) -> bool:
+    print_sub_banner("NTP Configuration", "Configure NTP time synchronization")
+    cfg.let_platform_handle_ntp = _ask_bool("Let platform handle NTP", cfg.let_platform_handle_ntp)
+    if not cfg.let_platform_handle_ntp:
+        cfg.ntp_servers = _ask_list("NTP servers")
+        if not cfg.ntp_servers:
+            cfg.ntp_servers = ["pool.ntp.org"]
+    return True
+
+
+def _configure_files(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Write Files", "Write arbitrary files to the target system (blank path to finish)")
+    while True:
+        check_shutdown()
+        p = input("  file path (blank to stop): ").strip()
+        if not p:
+            break
+        c = input("  file content: ").strip()
+        perm = input("  permissions [0644]: ").strip() or "0644"
+        cfg.write_files.append({"path": p, "content": c, "permissions": perm})
+    return True
+
+
+def _configure_bootcmd(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Early Boot Commands", "Commands that run early in boot (bootcmd)")
+    cfg.bootcmd = _ask_list("bootcmd (early boot commands)")
+    return True
+
+
+def _configure_firstboot(cfg: TemplateConfig) -> bool:
+    print_sub_banner("First-Boot Commands", "Commands that run on first boot (runcmd)")
+    cfg.firstboot = _ask_list("First-boot commands (runcmd)")
+    return True
+
+
+def _configure_final(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Final Message", "Message displayed when cloud-init completes")
+    cfg.final_message = _ask("Final message", cfg.final_message)
+    return True
+
+
+def _configure_sysprep(cfg: TemplateConfig) -> bool:
+    print_sub_banner("Windows Sysprep", "Generalize Windows for cloning (creates new SID)")
+    cfg.sysprep = _ask_bool("Run Sysprep generalize (new SID)", cfg.sysprep)
+    if cfg.sysprep:
+        cfg.sysprep_unattended = _ask_bool("Fully unattended (like vSphere Guest Customization)", cfg.sysprep_unattended)
+        cfg.sysprep_organization = _ask("Organization", cfg.sysprep_organization)
+        cfg.sysprep_owner = _ask("Owner", cfg.sysprep_owner)
+        cfg.sysprep_computer_prefix = _ask("Computer-name prefix", cfg.sysprep_computer_prefix)
+        cfg.sysprep_timezone = _ask("Timezone", cfg.sysprep_timezone)
+        cfg.sysprep_locale = _ask("Locale (UI)", cfg.sysprep_locale)
+        cfg.sysprep_product_key = input("Product key (blank=skip): ").strip()
+        check_shutdown()
+    return True
+
+
+def _configure_vsphere_spec(cfg: TemplateConfig) -> bool:
+    print_sub_banner("vSphere Customization Spec Export", "Export vSphere Guest Customization Specification (XML)")
+    cfg.export_vsphere_spec = _ask_bool("Export vSphere Customization Spec (XML)", cfg.export_vsphere_spec)
+    if cfg.export_vsphere_spec:
+        cfg.vsphere_spec_name = _ask("Spec name", cfg.vsphere_spec_name)
+    return True
+
+
+def _configure_vsphere_scripts(cfg: TemplateConfig) -> bool:
+    print_sub_banner("vSphere Pre/Post Customization Scripts", "Scripts that run before/after cloud-init during vSphere Guest Customization")
+    cfg.use_sample_scripts = _ask_bool("Use sample scripts (customizable)", cfg.use_sample_scripts)
+    if cfg.use_sample_scripts:
+        print("\nSample Pre-customization script (runs before cloud-init):")
+        print("# Example: Register with Satellite, install agents, etc.")
+        cfg.vsphere_pre_script = _ask("Pre-customization script (blank to skip)", "")
+        print("\nSample Post-customization script (runs after cloud-init):")
+        print("# Example: Join domain, run compliance checks, etc.")
+        cfg.vsphere_post_script = _ask("Post-customization script (blank to skip)", "")
+    return True
 
 
 def load_json(path: str) -> TemplateConfig:
