@@ -5,6 +5,19 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-08-28
+
+### Added
+- **Selector lists for configuration fields** — new generic `_ask_from_list()` helper and specific selectors for fields with known values:
+  - `_ask_timezone()` — Linux (IANA) and Windows timezones
+  - `_ask_locale()` / `_ask_windows_locale()` — Linux and Windows locale lists
+  - `_ask_keyboard_layout()` / `_ask_windows_keyboard()` — Linux keyboard layouts and Windows input method IDs
+  - `_ask_grow_device()` / `_ask_partition_number()` — common disk devices and partition numbers
+- **Applied to interactive configuration** — timezone, locale, keyboard layout (Linux & Windows), grow device/partition now show numbered lists with current default marked, user selects by number or types custom value
+
+### Changed
+- **Interactive prompts use selector lists** — replaced free-text `_ask()` with validated list selectors for fields with known value sets
+
 ## [1.5.2] - 2026-08-28
 
 ### Added

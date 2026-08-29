@@ -365,6 +365,234 @@ def _ask_dns(prompt: str, default: str = "") -> str:
         print_error(f"Invalid DNS IP. Example: 8.8.8.8")
 
 
+
+# Common timezones for Linux (IANA tz database)
+LINUX_TIMEZONES = [
+    "UTC",
+    "Europe/London",
+    "Europe/Berlin",
+    "Europe/Paris",
+    "Europe/Moscow",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Toronto",
+    "America/Vancouver",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Asia/Singapore",
+    "Asia/Dubai",
+    "Asia/Kolkata",
+    "Australia/Sydney",
+    "Australia/Melbourne",
+    "Australia/Perth",
+    "Pacific/Auckland",
+]
+
+# Common timezones for Windows (Windows time zone IDs)
+WINDOWS_TIMEZONES = [
+    "UTC",
+    "GMT Standard Time",
+    "W. Europe Standard Time",
+    "Central Europe Standard Time",
+    "Romance Standard Time",
+    "Russian Standard Time",
+    "Eastern Standard Time",
+    "Central Standard Time",
+    "Mountain Standard Time",
+    "Pacific Standard Time",
+    "Eastern Standard Time (Mexico)",
+    "Canada Central Standard Time",
+    "Pacific Standard Time (Mexico)",
+    "Tokyo Standard Time",
+    "China Standard Time",
+    "Singapore Standard Time",
+    "Arabian Standard Time",
+    "India Standard Time",
+    "AUS Eastern Standard Time",
+    "AUS Central Standard Time",
+    "W. Australia Standard Time",
+    "New Zealand Standard Time",
+]
+
+# Common locales (Linux)
+LINUX_LOCALES = [
+    "en_US.UTF-8",
+    "en_GB.UTF-8",
+    "de_DE.UTF-8",
+    "fr_FR.UTF-8",
+    "es_ES.UTF-8",
+    "it_IT.UTF-8",
+    "pt_PT.UTF-8",
+    "ru_RU.UTF-8",
+    "zh_CN.UTF-8",
+    "ja_JP.UTF-8",
+    "ko_KR.UTF-8",
+    "ar_SA.UTF-8",
+    "hi_IN.UTF-8",
+    "pt_BR.UTF-8",
+    "nl_NL.UTF-8",
+    "pl_PL.UTF-8",
+    "tr_TR.UTF-8",
+    "sv_SE.UTF-8",
+    "da_DK.UTF-8",
+    "fi_FI.UTF-8",
+    "nb_NO.UTF-8",
+    "cs_CZ.UTF-8",
+    "hu_HU.UTF-8",
+    "ro_RO.UTF-8",
+    "el_GR.UTF-8",
+    "he_IL.UTF-8",
+    "th_TH.UTF-8",
+    "vi_VN.UTF-8",
+    "id_ID.UTF-8",
+    "ms_MY.UTF-8",
+]
+
+# Common keyboard layouts (Linux)
+KEYBOARD_LAYOUTS = [
+    "us",
+    "uk",
+    "de",
+    "fr",
+    "es",
+    "it",
+    "pt",
+    "ru",
+    "cn",
+    "jp",
+    "kr",
+    "ar",
+    "in",
+    "br",
+    "nl",
+    "pl",
+    "tr",
+    "se",
+    "dk",
+    "fi",
+    "no",
+    "cz",
+    "hu",
+    "ro",
+    "gr",
+    "il",
+    "th",
+    "vn",
+    "id",
+    "my",
+]
+
+# Common grow devices (Linux)
+GROW_DEVICES = [
+    "/dev/sda",
+    "/dev/vda",
+    "/dev/nvme0n1",
+    "/dev/xvda",
+    "/dev/sdb",
+    "/dev/vdb",
+    "/dev/nvme1n1",
+]
+
+# Common Windows locales (Sysprep)
+WINDOWS_LOCALES = [
+    "en-US",
+    "en-GB",
+    "de-DE",
+    "fr-FR",
+    "es-ES",
+    "it-IT",
+    "pt-PT",
+    "ru-RU",
+    "zh-CN",
+    "ja-JP",
+    "ko-KR",
+    "ar-SA",
+    "hi-IN",
+    "pt-BR",
+    "nl-NL",
+    "pl-PL",
+    "tr-TR",
+    "sv-SE",
+    "da-DK",
+    "fi-FI",
+    "nb-NO",
+    "cs-CZ",
+    "hu-HU",
+    "ro-RO",
+    "el-GR",
+    "he-IL",
+    "th-TH",
+    "vi-VN",
+    "id-ID",
+    "ms-MY",
+]
+
+
+def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool = True) -> str:
+    """Generic selector: shows numbered list, returns selected or custom entry."""
+    while True:
+        check_shutdown()
+        print_section(prompt, "Select from list or type custom value")
+        
+        for i, opt in enumerate(options, 1):
+            marker = " ✓" if opt == default else ""
+            print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{marker}")
+        
+        if allow_custom:
+            print(f"  {colorize('0', Colors.GRAY)}) Custom entry...")
+        print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
+        
+        val = input(f"  {colorize('Select', Colors.BOLD)} [Enter]: ").strip()
+        
+        if not val:
+            return default
+        
+        if val.isdigit():
+            idx = int(val)
+            if idx == 0 and allow_custom:
+                custom = input(f"  {colorize('Custom value', Colors.BOLD)}: ").strip()
+                if custom:
+                    return custom
+                continue
+            elif 1 <= idx <= len(options):
+                return options[idx - 1]
+        
+        # Custom typed value
+        if allow_custom:
+            return val
+        # If not allowed, loop again
+        print_error("Please select a number from the list.")
+
+
+def _ask_timezone(prompt: str, default: str = "", os_type: str = "linux") -> str:
+    """Ask for a timezone, showing a selectable list."""
+    zones = LINUX_TIMEZONES if os_type == "linux" else WINDOWS_TIMEZONES
+    return _ask_from_list(prompt, default, zones)
+
+
+def _ask_locale(prompt: str, default: str = "") -> str:
+    return _ask_from_list(prompt, default, LINUX_LOCALES)
+
+
+def _ask_keyboard_layout(prompt: str, default: str = "") -> str:
+    return _ask_from_list(prompt, default, KEYBOARD_LAYOUTS)
+
+
+def _ask_grow_device(prompt: str, default: str = "") -> str:
+    return _ask_from_list(prompt, default, GROW_DEVICES)
+
+
+def _ask_partition_number(prompt: str, default: str = "") -> str:
+    options = ["1", "2", "3", "4", "5"]
+    return _ask_from_list(prompt, default, options)
+
+
+def _ask_windows_locale(prompt: str, default: str = "") -> str:
+    return _ask_from_list(prompt, default, WINDOWS_LOCALES)
+
+
 def _choose(prompt: str, options: List[str], allow_back: bool = False) -> str:
     """Choose from options. Returns selected option or 'BACK' if back selected."""
     check_shutdown()
@@ -691,16 +919,16 @@ def _configure_packages(cfg: TemplateConfig) -> bool:
 
 def _configure_locale(cfg: TemplateConfig) -> bool:
     print_section("Locale & Timezone", "Set timezone, locale, and keyboard layout")
-    cfg.timezone = _ask("Timezone", cfg.timezone)
-    cfg.locale = _ask("Locale", cfg.locale)
-    cfg.keyboard_layout = _ask("Keyboard layout", cfg.keyboard_layout)
+    cfg.timezone = _ask_timezone("Timezone", cfg.timezone, os_type="linux")
+    cfg.locale = _ask_locale("Locale", cfg.locale)
+    cfg.keyboard_layout = _ask_keyboard_layout("Keyboard layout", cfg.keyboard_layout)
     return True
 
 
 def _configure_disk(cfg: TemplateConfig) -> bool:
     print_section("Disk Configuration", "Grow root filesystem on first boot")
-    cfg.grow_device = _ask("Grow device", cfg.grow_device)
-    cfg.grow_partition = _ask("Partition number", cfg.grow_partition)
+    cfg.grow_device = _ask_grow_device("Grow device", cfg.grow_device)
+    cfg.grow_partition = _ask_partition_number("Partition number", cfg.grow_partition)
     return True
 
 
@@ -753,8 +981,8 @@ def _configure_sysprep(cfg: TemplateConfig) -> bool:
         cfg.sysprep_organization = _ask("Organization", cfg.sysprep_organization)
         cfg.sysprep_owner = _ask("Owner", cfg.sysprep_owner)
         cfg.sysprep_computer_prefix = _ask("Computer-name prefix", cfg.sysprep_computer_prefix)
-        cfg.sysprep_timezone = _ask("Timezone", cfg.sysprep_timezone)
-        cfg.sysprep_locale = _ask("Locale (UI)", cfg.sysprep_locale)
+        cfg.sysprep_timezone = _ask_timezone("Timezone", cfg.sysprep_timezone, os_type="windows")
+        cfg.sysprep_locale = _ask_windows_locale("Locale (UI)", cfg.sysprep_locale)
         cfg.sysprep_product_key = input("Product key (blank=skip): ").strip()
         check_shutdown()
     return True

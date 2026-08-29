@@ -123,6 +123,7 @@ This writes (config-only, no ISO):
 - **No ISO** is produced — CloudSeed is config-only. Full apply steps in [GUIDE.md](GUIDE.md).
 - **Conflict avoidance**: Enable "Let Platform Handle..." modules to let vSphere/KVM manage hostname/network/NTP instead of cloud-init, avoiding duplicate configuration.
 - **Overwrite protection**: If output file exists, CloudSeed asks: Overwrite / Add suffix / Skip.
+- **Selector lists for known-value fields** — timezone, locale, keyboard layout, disk device/partition show numbered lists; user picks by number or types custom value.
 
 ## Command-line flags
 
