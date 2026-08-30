@@ -19,7 +19,8 @@ MODULES = [
     ("bootcmd", "Early Boot Commands (bootcmd)", ["linux"]),
     ("firstboot", "First-Boot Commands (runcmd)", ["linux", "windows"]),
     ("final", "Final Status Message", ["linux"]),
-    ("sysprep", "Windows Sysprep Generalize (New SID)", ["windows"]),
+    # Template Best Practices
+    ("template_best_practices", "Template Best Practices (Cleanup, Logs, Caches, SSH, Machine-ID)", ["linux", "windows"]),
     # Platform compatibility settings
     ("platform_hostname", "Let Platform Set Hostname (vSphere/KVM)", ["linux", "windows"]),
     ("platform_network", "Let Platform Handle Network (Avoid Conflicts)", ["linux", "windows"]),

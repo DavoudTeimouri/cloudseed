@@ -11,17 +11,11 @@ import subprocess
 from typing import List
 
 from . import __version__
-from .model import collect_interactive, load_json, TemplateConfig, setup_signal_handlers
+from .model import collect_interactive, load_json, TemplateConfig, setup_signal_handlers, print_section
 from .generate import generate_all, build_user_data, build_meta_data
 
-
-def print_banner(title: str = "Main Menu") -> None:
-    """Print CloudSeed banner on all menus."""
-    print("\n" + "=" * 60)
-    print(f"  CloudSeed {__version__}")
-    print("  cloud-init / Cloudbase-Init VM Template Generator")
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+# Import banner from model
+from .model import print_banner
 
 
 def _print_generated(written: List[str]) -> None:
@@ -187,11 +181,25 @@ def run_interactive(out_dir: str, plaintext: bool = False,
 
     written = generate_all(cfg, out_dir, interactive=True)
     _print_generated(written)
-
-    print("--- user-data preview ---")
+    
+    print("\n--- user-data preview ---")
     print(build_user_data(cfg))
     print("--- meta-data preview ---")
     print(build_meta_data(cfg))
+    
+    # Post-export: run validator on the generated config
+    print_section("Post-Export Validation", "Running config validator on generated files...")
+    # Find the platform/OS subdir that was created
+    plat_name = "vsphere" if cfg.platform == "vsphere" else cfg.platform
+    subdir = os.path.join(out_dir, f"{plat_name}-{cfg.os_type}")
+    if os.path.isdir(subdir):
+        from .validator import validate_all
+        validate_all(subdir)
+    else:
+        # Fallback to out_dir
+        from .validator import validate_all
+        validate_all(out_dir)
+    
     return 0
 
 

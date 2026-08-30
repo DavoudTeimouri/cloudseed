@@ -9,7 +9,7 @@ import os
 import uuid
 from typing import Any, Dict, List
 
-from .model import TemplateConfig
+from .model import TemplateConfig, print_info, print_warn, _ask_overwrite
 
 
 # --- minimal YAML emitter --------------------------------------------------
@@ -200,8 +200,10 @@ def _cidr(netmask: str) -> int:
 def build_meta_data(cfg: TemplateConfig) -> str:
     # Generate unique instance-id per config
     instance_id = f"iid-{uuid.uuid4().hex[:8]}"
-    lines = [f"instance-id: {instance_id}",
-             "local-hostname: " + (cfg.hostname or "cloudseed-vm")]
+    lines = [f"instance-id: {instance_id}"]
+    # Only write local-hostname if platform is NOT handling it
+    if not cfg.use_platform_hostname:
+        lines.append("local-hostname: " + (cfg.hostname or "cloudseed-vm"))
     return "\n".join(lines) + "\n"
 
 
@@ -600,6 +602,16 @@ def build_readme(cfg: TemplateConfig, warnings: List[str] = None) -> str:
             "  Windows: place .conf in Cloudbase-Init conf dir; run run-sysprep.bat",
             "           BEFORE sealing the template.",
         ]
+        # vSphere Customization Spec import guide
+        if cfg.export_vsphere_spec:
+            lines += [
+                "",
+                "vSphere Customization Spec Import:",
+                "  1. In vCenter, go to Policies and Profiles > Customization Specifications",
+                "  2. Click 'Import Specification' and select vsphere-customization-spec.xml",
+                "  3. Apply the spec when deploying/cloning VMs",
+                "  4. For scripts: pre-script runs before cloud-init, post-script runs after",
+            ]
     else:
         lines += [
             "  Linux : virt-install --cloud-init user-data=./user-data,meta-data=./meta-data",
@@ -615,10 +627,27 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
     from .cli import validate_config
     from .model import _get_unique_path
     
+    # Reset overwrite-all state for new generation
+    import cloudseed.model as model_mod
+    model_mod._overwrite_all_action = None
+    
     # Organize output by platform/OS: e.g., out_dir/vsphere-linux/, out_dir/kvm-windows/, etc.
     plat_name = "vsphere" if cfg.platform == "vsphere" else cfg.platform
     subdir = os.path.join(out_dir, f"{plat_name}-{cfg.os_type}")
     os.makedirs(subdir, exist_ok=True)
+    
+    # Check for existing cloudseed.json in the platform/OS subdir (collision detection)
+    subdir_json = os.path.join(subdir, "cloudseed.json")
+    if os.path.exists(subdir_json):
+        print_warn(f"Existing cloudseed.json found in target directory: {subdir_json}")
+        print_warn("This may indicate a previous generation for the same platform/OS.")
+        if interactive:
+            action = _ask_overwrite(subdir_json)
+            if action == "skip":
+                print_info("Skipping generation to avoid collision.")
+                return []
+            # If overwrite or suffix, continue (the _get_unique_path will handle it)
+    
     written: List[str] = []
 
     # Validate and get warnings
@@ -656,8 +685,13 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
         if post_script:
             w("vsphere-post-script.sh" if cfg.os_type == "linux" else "vsphere-post-script.bat", post_script)
 
-    with open(os.path.join(out_dir, "cloudseed.json"), "w", encoding="utf-8") as fh:
-        _json.dump(cfg.to_dict(), fh, indent=2)
-    written.append(os.path.join(out_dir, "cloudseed.json"))
+    # Write cloudseed.json to out_dir root (not subdir) for reusability
+    # But check if it already exists in the subdir
+    root_json = os.path.join(out_dir, "cloudseed.json")
+    unique_root_json = _get_unique_path(out_dir, "cloudseed.json")
+    if unique_root_json is not None:
+        with open(unique_root_json, "w", encoding="utf-8") as fh:
+            _json.dump(cfg.to_dict(), fh, indent=2)
+        written.append(unique_root_json)
     w("README.txt", build_readme(cfg, warnings))
     return written

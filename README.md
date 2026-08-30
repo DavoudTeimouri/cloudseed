@@ -95,7 +95,7 @@ This writes (config-only, no ISO):
 | `bootcmd` | ✅ | ❌ | 22.1 | Early boot commands (bootcmd) |
 | `firstboot` | ✅ | ✅ | 22.1 | First-boot commands (runcmd / LocalScripts) |
 | `final` | ✅ | ❌ | 22.1 | Final status message on console |
-| `sysprep` | ❌ | ✅ | N/A | Windows Sysprep generalize (new SID) |
+| `template_best_practices` | ✅ | ✅ | N/A | Template cleanup & preparation (logs, tmp, SSH, machine-id, package cache, journal, udev, Windows updates, event logs, driver store, VM tools, guest agent) |
 
 ### Platform compatibility modules (avoid cloud-init conflicts)
 
@@ -111,19 +111,20 @@ This writes (config-only, no ISO):
 
 | Module | Linux | Windows | Description |
 |--------|:-----:|:-------:|-------------|
-| `vsphere_spec` | ✅ | ✅ | Export vSphere Customization Spec (XML) |
-| `vsphere_scripts` | ✅ | ✅ | vSphere Pre/Post Customization Scripts (with samples) |
+| `vsphere_spec` | ✅ | ✅ | Export vSphere Customization Spec (XML) + import guide |
+| `vsphere_scripts` | ✅ | ✅ | vSphere Pre/Post Customization Scripts (with vendor samples) |
 
 ## Notes on platforms
 
-- **vSphere**: apply Linux via VM **guestinfo** (`guestinfo.userdata` / `guestinfo.metadata`) or drop `user-data` into the golden image's `/etc/cloud/cloud.cfg.d/`. Windows: place `cloudbase-init*.conf` in the Cloudbase-Init conf dir and run `run-sysprep.bat` before sealing. Use exported Customization Spec XML for vSphere Guest Customization.
+- **vSphere**: apply Linux via VM **guestinfo** (`guestinfo.userdata` / `guestinfo.metadata`) or drop `user-data` into the golden image's `/etc/cloud/cloud.cfg.d/`. Windows: place `cloudbase-init*.conf` in the Cloudbase-Init conf dir and run `run-sysprep.bat` before sealing. Use exported Customization Spec XML for vSphere Guest Customization (import guide in generated README.txt).
 - **KVM**: `virt-install --cloud-init user-data=./user-data,meta-data=./meta-data`, or drop-in on the image. Windows same as vSphere for conf files.
 - **Physical / Other**: CloudSeed generates standard cloud-init / Cloudbase-Init configs for any provisioning method (PXE, ISO, config drive, etc.)
 - **Passwords are hashed by default** with a `$6$` SHA-512 crypt hash (cloud-init rejects plaintext). Resolution: host `crypt()` → `openssl passwd -6` → pure-stdlib fallback. Use `--plaintext-password` to emit plaintext (discouraged).
 - **No ISO** is produced — CloudSeed is config-only. Full apply steps in [GUIDE.md](GUIDE.md).
 - **Conflict avoidance**: Enable "Let Platform Handle..." modules to let vSphere/KVM manage hostname/network/NTP instead of cloud-init, avoiding duplicate configuration.
-- **Overwrite protection**: If output file exists, CloudSeed asks: Overwrite / Add suffix / Skip.
-- **Selector lists for known-value fields** — timezone, locale, keyboard layout, disk device/partition show numbered lists; user picks by number or types custom value.
+- **Overwrite protection**: If output file exists, CloudSeed asks: Overwrite / Add suffix / Skip / Overwrite ALL.
+- **Selector lists for known-value fields** — timezone, locale, keyboard layout, disk device/partition show numbered lists; user picks by number or types custom value. Type-ahead filtering for timezone (~600 IANA zones).
+- **Post-export validation** — After generating configs, CloudSeed automatically runs Config Validator on the output directory and shows summary.
 
 ## Command-line flags
 

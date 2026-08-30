@@ -21,11 +21,13 @@ def test_cidr():
 def test_module_catalog_covers_os():
     from cloudseed.modules import MODULES
     ids = {m[0] for m in MODULES}
-    assert {"hostname", "users", "ssh", "network", "ntp", "sysprep"} <= ids
-    sysprep = next(m for m in MODULES if m[0] == "sysprep")
-    assert sysprep[2] == ["windows"]        # sysprep linux-only-false
+    # sysprep is now mandatory for Windows, not a toggleable module
+    assert {"hostname", "users", "ssh", "network", "ntp", "template_best_practices"} <= ids
     disk = next(m for m in MODULES if m[0] == "disk")
     assert disk[2] == ["linux"]
+    # Template best practices should apply to both Linux and Windows
+    tbp = next(m for m in MODULES if m[0] == "template_best_practices")
+    assert tbp[2] == ["linux", "windows"]
 
 
 def test_linux_full_userdata():

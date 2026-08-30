@@ -340,6 +340,7 @@ def validator_menu() -> int:
         print_section("Config Validator", "Validate exported CloudSeed configurations")
         print()
         print(f"  {colorize('1', Colors.CYAN)}) Validate a config directory")
+        print(f"  {colorize('2', Colors.CYAN)}) Scan for cloudseed.json in subdirectories (2 levels deep)")
         print(f"  {colorize('0', Colors.GRAY)}) ← Back to Main Menu")
         print()
         
@@ -348,15 +349,97 @@ def validator_menu() -> int:
         
         if choice == "1":
             path = input("Config directory path [.]: ").strip() or "."
+            # Handle quoted paths
+            path = path.strip('"\'')
             if not os.path.isdir(path):
                 print_error(f"Not a directory: {path}")
             else:
                 validate_all(path)
             input("\nPress Enter to continue...")
+        elif choice == "2":
+            base = input("Base directory to scan [.]: ").strip() or "."
+            base = base.strip('"\'')
+            if not os.path.isdir(base):
+                print_error(f"Not a directory: {base}")
+            else:
+                scan_subdirs_for_configs(base)
+            input("\nPress Enter to continue...")
         elif choice == "0":
             return 0
         else:
             print_error("Invalid selection.")
+
+
+def scan_subdirs_for_configs(base_dir: str, max_depth: int = 2) -> None:
+    """Recursively scan for cloudseed.json in subdirectories up to max_depth."""
+    from pathlib import Path
+    
+    print_info(f"Scanning {base_dir} (max depth: {max_depth})...")
+    print()
+    
+    configs = []
+    base_path = Path(base_dir)
+    
+    def scan(path: Path, depth: int):
+        if depth > max_depth:
+            return
+        # Check for cloudseed.json in this directory
+        json_file = path / "cloudseed.json"
+        if json_file.exists():
+            configs.append(str(json_file))
+        # Recurse into subdirectories
+        if depth < max_depth:
+            try:
+                for subdir in path.iterdir():
+                    if subdir.is_dir() and not subdir.name.startswith('.'):
+                        scan(subdir, depth + 1)
+            except PermissionError:
+                pass
+    
+    scan(base_path, 0)
+    
+    if not configs:
+        print_warn("No cloudseed.json files found in subdirectories.")
+        return
+    
+    print_success(f"Found {len(configs)} cloudseed.json file(s):")
+    for i, cfg in enumerate(configs, 1):
+        print(f"  {colorize(str(i), Colors.CYAN)}) {cfg}")
+    print()
+    
+    print(f"  {colorize('1', Colors.CYAN)}) Validate all found configs")
+    print(f"  {colorize('2', Colors.CYAN)}) Validate specific config")
+    print(f"  {colorize('3', Colors.CYAN)}) Delete all found configs (cleanup)")
+    print(f"  {colorize('0', Colors.GRAY)}) ← Back")
+    print()
+    
+    action = input(f"  {colorize('Action', Colors.BOLD)} [0]: ").strip() or "0"
+    
+    if action == "1":
+        for cfg in configs:
+            print_section("Validation", f"Validating: {cfg}")
+            validate_all(str(Path(cfg).parent))
+    elif action == "2":
+        sel = input(f"  {colorize('Select number', Colors.BOLD)}: ").strip()
+        if sel.isdigit():
+            idx = int(sel)
+            if 1 <= idx <= len(configs):
+                validate_all(str(Path(configs[idx-1]).parent))
+    elif action == "3":
+        confirm = input("⚠️  Type 'DELETE' to confirm removing all found configs: ").strip()
+        if confirm == "DELETE":
+            for cfg in configs:
+                try:
+                    os.remove(cfg)
+                    print_success(f"Deleted: {cfg}")
+                except Exception as e:
+                    print_error(f"Failed to delete {cfg}: {e}")
+        else:
+            print_info("Cancelled.")
+    elif action == "0":
+        return
+    else:
+        print_error("Invalid selection.")
 
 
 if __name__ == "__main__":

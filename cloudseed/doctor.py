@@ -231,8 +231,9 @@ def check_disk_space() -> Dict[str, Any]:
     info = {
         "partitions": [],
         "warnings": [],
+        "errors": [],
     }
-    
+
     rc, out, err = run_cmd(["df", "-h", "/", "/var", "/tmp"])
     if rc == 0:
         info["df_output"] = out.strip()

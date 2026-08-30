@@ -5,6 +5,107 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-08-29
+
+### 🎉 Major Release — Breaking Changes
+
+This is a major version release with significant improvements to configuration flow, validation, template preparation, and user experience. Several breaking changes require attention:
+
+| Change | Impact | Migration |
+|--------|--------|-----------|
+| **Windows Sysprep now mandatory** | `sysprep` module removed from toggle; always enabled for Windows | Remove `"sysprep"` from `modules` list in saved `cloudseed.json` |
+| **Platform modules auto-skip cloud-init config** | When `platform_hostname`/`platform_network`/`platform_ntp` selected, their cloud-init equivalents are not prompted | No action needed — behavior is automatic |
+| **Config validator scans recursively** | Scans 2 levels deep by default, accepts quoted paths | Adjust `max_depth` if deeper scans needed |
+| **cloudseed.json collision detection** | Warns when generating in directory with existing config | Choose different output or clean existing files |
+
+---
+
+### ✨ Added
+
+#### Configuration & Generation
+- **Post-export validation flow** — After generating configs, CloudSeed now automatically runs the Config Validator on the output directory, displays a summary (warnings/pass/fail), then returns to main menu
+- **Full IANA timezone database** — ~600 zones with type-ahead filtering (type "ber" → shows Berlin, Bermuda, etc.) and pagination fallback
+- **Complete Windows timezone list** — All Windows time zones (e.g., `W. Europe Standard Time`) with same filtering
+- **Template Best Practices module** — New module (`template_best_practices`) with granular OS-specific cleanup controls:
+  - **Linux**: log cleanup, temp dirs, SSH host keys, machine-id, package cache, systemd journal, udev persistent rules
+  - **Windows**: Event Logs, Windows Update cache, DriverStore (pnputil)
+  - **Tooling**: VMware Tools/open-vm-tools, qemu-guest-agent toggles
+- **vSphere Customization Spec import guide** — Embedded in generated README.txt with step-by-step vCenter import instructions
+- **Pre/Post customization script samples** — Vendor-style sample scripts for Linux (bash) and Windows (batch) with multi-line editor; covers Satellite registration, agent installs, AD join, compliance checks, monitoring registration
+- **Overwrite-all option** — File overwrite prompt now includes "4) Overwrite ALL remaining files" for batch operations
+- **Config validator recursive scan** — Option 2 in validator menu scans 2+ subdirectory levels for `cloudseed.json`, lists findings, offers validate/delete/cleanup actions
+- **Quoted path support** — Validator and scan accept directory paths wrapped in quotes (`"C:\My Path"`)
+
+#### Template Maker (Prepare Current Machine as Template)
+- **Multi-confirmation for production safety** — Typed confirmations required:
+  - Physical machine: `PHYSICAL-OK`
+  - Non-admin: `NO-ADMIN-OK`  
+  - Final (both cases): `I-UNDERSTAND`
+- **Best Practices Checklist** — Interactive checklist with vendor recommendations per OS/platform (vSphere/KVM/Physical)
+- **Cleanup script generation** — Produces standalone `cloudseed-template-cleanup-linux.sh` / `.bat` for manual execution on target VMs
+- **Modern menu** — Consolidated 4 options: Clean & Prepare, Show Checklist, Generate Script, Remove CloudSeed
+
+#### User Experience
+- **Modern ASCII banner** — Box-drawing logo with version, tagline, platform support, zero-dependency badge
+- **Box-drawing section headers** — Consistent framed menus with cyan borders
+- **Improved module selection** — Reverse conflict resolution (selecting cloud-init module auto-disables platform equivalent)
+- **Type-ahead filtering everywhere** — Timezone, locale, keyboard, disk device selectors all support instant filtering
+
+#### Validation & Safety
+- **Platform hostname meta-data fix** — `local-hostname` omitted from meta-data when `platform_hostname` enabled (prevents cloud-init + platform conflict)
+- **Doctor disk space fix** — Fixed `KeyError: 'errors'` crash in `check_disk_space()`
+- **cloudseed.json collision detection** — Warns before overwriting existing config in platform/OS subdirectory
+
+---
+
+### 🔄 Changed
+
+- **Module configuration flow** — Platform modules (`platform_hostname`, `platform_network`, `platform_ntp`) now **skip their configuration prompts entirely** when selected; cloud-init equivalents are auto-disabled and hidden
+- **Default module state** — Platform modules default ON; cloud-init equivalents default OFF (user can still enable them, which auto-disables platform module)
+- **Network configuration** — When `platform_network` selected, DHCP/static/DNS prompts are skipped; platform handles networking
+- **NTP configuration** — When `platform_ntp` selected, NTP server prompts are skipped
+- **Generated output structure** — `cloudseed.json` written to output root (for reuse), configs in `out/<platform>-<os>/` (e.g., `vsphere-linux/`, `kvm-windows/`)
+- **Windows Sysprep** — Now mandatory, hidden from module list, only sub-configuration (timezone, locale, product key) shown
+
+---
+
+### 🐛 Fixed
+
+- **Doctor KeyError** — `check_disk_space()` in `doctor.py` line 251 now initializes `errors` list before use
+- **Instance-id + local-hostname conflict** — When platform handles hostname, meta-data no longer contains `local-hostname`
+- **Multiple run collision** — Each run generates unique `iid-<random8>`; collision detection prevents silent overwrites
+- **Validation depth** — Config validator now clearly informs user of 2-level scan depth
+
+---
+
+### 📦 Built With
+
+- **Python 3.8+** (stdlib only — zero runtime dependencies)
+- **PyInstaller** for Windows x64 and Linux binaries
+- **All 14 tests passing** (CIDR, module catalog, Linux/Windows user-data, round-trip JSON, password hashing, network static config)
+
+---
+
+### 📚 Documentation Updates
+
+- **README.md** — Added v2.0.0 feature highlights, new module table, Template Maker section, validator usage
+- **GUIDE.md** — New "Template Best Practices" chapter, vSphere Spec import guide, production warnings, cleanup script usage
+- **CHANGELOG.md** — This detailed entry following ObtainHub release page format
+
+---
+
+### 🔗 Migration Checklist
+
+For users upgrading from 1.5.x:
+
+1. **Remove `"sysprep"` from `modules`** in any saved `cloudseed.json` (now mandatory for Windows)
+2. **Re-run module selection** — platform modules default ON, cloud-init equivalents OFF
+3. **Test Template Maker** on non-production VM first (new multi-confirm flow)
+4. **Check generated README.txt** for vSphere Spec import steps if using `vsphere_spec`
+5. **Update CI/CD** — output directory structure unchanged (`out/<platform>-<os>/`)
+
+---
+
 ## [1.5.3] - 2026-08-28
 
 ### Added

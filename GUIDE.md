@@ -516,7 +516,40 @@ cloudseed  # Main Menu → Config Validator → Validate a config directory
 
 ---
 
-## 21. Banner and Menu Overview (v1.1.0+)
+## 21. Template Best Practices (NEW)
+
+CloudSeed includes a **Template Best Practices** module (`template_best_practices`) that configures OS-specific cleanup and preparation steps for creating VM golden images. These settings control what actions are included when using the **Template Maker** (prepare current machine as template) or when generating cleanup scripts.
+
+When enabled, CloudSeed generates additional metadata and instructions in `README.txt` to guide the template preparation process. The actual cleanup is performed by the Template Maker menu or the generated scripts (Linux `.sh`, Windows `.bat`).
+
+### Linux Best Practices
+- **Log cleanup**: Truncate `/var/log/*.log`, `/var/log/*/*.log`, vacuum systemd journal
+- **Temp files**: Clean `/tmp`, `/var/tmp`
+- **SSH host keys**: Remove `/etc/ssh/ssh_host_*` (regenerated on first boot)
+- **Machine-id**: Remove `/etc/machine-id` and `/var/lib/dbus/machine-id`
+- **Package cache**: `apt clean`, `dnf clean all`, `zypper clean`, `yum clean all`
+- **Cloud-init**: `cloud-init clean --machine-id`
+- **Udev rules**: Remove persistent net rules (`/etc/udev/rules.d/70-persistent-net.rules`)
+- **Tooling**: Install `open-vm-tools` (vSphere) or `qemu-guest-agent` (KVM)
+
+### Windows Best Practices
+- **Event Logs**: Clear System, Security, Application logs via `wevtutil cl`
+- **Windows Update cache**: Clean `C:\\Windows\\SoftwareDistribution\\Download`
+- **DriverStore**: Remove old drivers via `pnputil /delete-driver`
+- **Tooling**: Install `VMware Tools` (vSphere) or `qemu-guest-agent` (KVM)
+
+### Usage
+1. Enable the `template_best_practices` module during configuration
+2. Customize which cleanup actions to include via the interactive prompts
+3. Generate configs and follow the instructions in the output `README.txt`
+4. For direct template preparation, use the **Template Maker** menu from the main menu
+   - Requires running as root/Administrator
+   - Includes multi-confirmation for production safety (typed confirmations: `PHYSICAL-OK`, `NO-ADMIN-OK`, `I-UNDERSTAND`)
+   - Can generate a standalone cleanup script for manual execution on target VMs
+
+> **Note**: These settings are **informational** when generating configs for provisioning. They do not affect the generated `user-data`/`meta-data` directly. Instead, they are recorded in `cloudseed.json` and explained in `README.txt` to guide the template creation process.
+
+---\n## 22. Banner and Menu Overview (v2.0.0+)
 
 All menus display a consistent banner:
 
