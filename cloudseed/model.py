@@ -794,8 +794,11 @@ def collect_interactive() -> TemplateConfig:
 def _configure_modules(cfg: TemplateConfig, available: List[tuple]) -> bool:
     """Configure all selected modules. Returns True if complete, False if user wants to go back."""
     
-    # Hostname settings
-    if cfg.has("hostname") or cfg.has("platform_hostname"):
+    # Hostname settings - only configure cloud-init hostname if platform not handling it
+    if cfg.has("platform_hostname"):
+        # Platform handles hostname - skip cloud-init hostname config
+        pass
+    elif cfg.has("hostname"):
         if not _configure_hostname(cfg):
             return False
     
@@ -811,7 +814,10 @@ def _configure_modules(cfg: TemplateConfig, available: List[tuple]) -> bool:
         if not _configure_root(cfg):
             return False
     
-    if cfg.has("network") or cfg.has("platform_network"):
+    # Network - only configure cloud-init network if platform not handling it
+    if cfg.has("platform_network"):
+        pass
+    elif cfg.has("network"):
         if not _configure_network(cfg):
             return False
     
@@ -827,7 +833,10 @@ def _configure_modules(cfg: TemplateConfig, available: List[tuple]) -> bool:
         if not _configure_disk(cfg):
             return False
     
-    if cfg.has("ntp") or cfg.has("platform_ntp"):
+    # NTP - only configure cloud-init NTP if platform not handling it
+    if cfg.has("platform_ntp"):
+        pass
+    elif cfg.has("ntp"):
         if not _configure_ntp(cfg):
             return False
     
@@ -866,6 +875,10 @@ def _configure_modules(cfg: TemplateConfig, available: List[tuple]) -> bool:
 
 def _configure_hostname(cfg: TemplateConfig) -> bool:
     print_section("Hostname Configuration", "Configure how the VM hostname is set")
+    # If platform_hostname module is selected, platform handles it - skip this config
+    if cfg.has("platform_hostname"):
+        print_info("Platform module 'platform_hostname' selected -> platform will set hostname")
+        return True
     cfg.use_platform_hostname = _ask_bool("Let platform (vSphere/KVM) set hostname", cfg.use_platform_hostname)
     if not cfg.use_platform_hostname:
         cfg.hostname_prefix = _ask("Hostname prefix", cfg.hostname_prefix)
@@ -897,6 +910,10 @@ def _configure_root(cfg: TemplateConfig) -> bool:
 
 def _configure_network(cfg: TemplateConfig) -> bool:
     print_section("Network Configuration", "Configure network - DHCP or static IP with DNS")
+    # If platform_network module is selected, platform handles it - skip this config
+    if cfg.has("platform_network"):
+        print_info("Platform module 'platform_network' selected -> platform will configure network")
+        return True
     cfg.let_platform_handle_network = _ask_bool("Let platform handle network (avoid conflicts with cloud-init)", cfg.let_platform_handle_network)
     if not cfg.let_platform_handle_network:
         cfg.net_mode = _choose("Network mode:", ["dhcp", "static"], allow_back=False).split()[0]
@@ -934,6 +951,10 @@ def _configure_disk(cfg: TemplateConfig) -> bool:
 
 def _configure_ntp(cfg: TemplateConfig) -> bool:
     print_section("NTP Configuration", "Configure NTP time synchronization")
+    # If platform_ntp module is selected, platform handles it - skip this config
+    if cfg.has("platform_ntp"):
+        print_info("Platform module 'platform_ntp' selected -> platform will configure NTP")
+        return True
     cfg.let_platform_handle_ntp = _ask_bool("Let platform handle NTP", cfg.let_platform_handle_ntp)
     if not cfg.let_platform_handle_ntp:
         cfg.ntp_servers = _ask_list("NTP servers")

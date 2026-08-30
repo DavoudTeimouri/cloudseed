@@ -200,7 +200,10 @@ def run_interactive(out_dir: str, plaintext: bool = False,
         from .validator import validate_all
         validate_all(out_dir)
     
-    return 0
+    # Return to main menu instead of exiting
+    print("\n" + "=" * 50)
+    input("Press Enter to return to Main Menu...")
+    return run_interactive(out_dir, plaintext, write_cloud_init_path)
 
 
 def build_parser() -> argparse.ArgumentParser:

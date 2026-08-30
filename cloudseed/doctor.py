@@ -233,23 +233,68 @@ def check_disk_space() -> Dict[str, Any]:
         "warnings": [],
         "errors": [],
     }
-
-    rc, out, err = run_cmd(["df", "-h", "/", "/var", "/tmp"])
-    if rc == 0:
-        info["df_output"] = out.strip()
-        
-        # Parse for low space
-        for line in out.strip().split('\n')[1:]:
-            parts = line.split()
-            if len(parts) >= 5:
-                use_pct = parts[4].rstrip('%')
-                try:
-                    if int(use_pct) > 90:
-                        info["warnings"].append(f"Low disk space: {parts[5]} at {use_pct}%")
-                except ValueError:
-                    pass
+    
+    import platform as plat
+    system = plat.system().lower()
+    
+    if system == "windows":
+        # Windows disk space check using wmic or Get-PSDrive
+        rc, out, err = run_cmd(["wmic", "logicaldisk", "get", "size,freespace,caption"])
+        if rc == 0:
+            info["wmic_output"] = out.strip()
+            # Parse wmic output
+            for line in out.strip().split('\n')[1:]:
+                parts = line.split()
+                if len(parts) >= 3:
+                    try:
+                        free = int(parts[0]) if parts[0] else 0
+                        total = int(parts[2]) if parts[2] else 0
+                        caption = parts[1] if len(parts) > 1 else "Unknown"
+                        if total > 0:
+                            use_pct = ((total - free) / total) * 100
+                            if use_pct > 90:
+                                info["warnings"].append(f"Low disk space: {caption} at {use_pct:.1f}%")
+                            info["partitions"].append({
+                                "device": caption,
+                                "total_gb": round(total / (1024**3), 2),
+                                "free_gb": round(free / (1024**3), 2),
+                                "use_percent": round(use_pct, 1)
+                            })
+                    except (ValueError, IndexError):
+                        pass
+        else:
+            # Fallback to PowerShell
+            rc, out, err = run_cmd(["powershell", "-Command", "Get-PSDrive | Where-Object {$_.Provider.Name -eq 'FileSystem'} | Select-Object Name,Used,Free"])
+            if rc == 0:
+                info["ps_output"] = out.strip()
+            else:
+                info["errors"].append(f"Disk space check failed: {err}")
     else:
-        info["errors"].append(f"df failed: {err}")
+        # Linux/Unix disk space check using df
+        rc, out, err = run_cmd(["df", "-h", "/", "/var", "/tmp"])
+        if rc == 0:
+            info["df_output"] = out.strip()
+            
+            # Parse for low space
+            for line in out.strip().split('\n')[1:]:
+                parts = line.split()
+                if len(parts) >= 5:
+                    use_pct = parts[4].rstrip('%')
+                    try:
+                        if int(use_pct) > 90:
+                            info["warnings"].append(f"Low disk space: {parts[5]} at {use_pct}%")
+                        info["partitions"].append({
+                            "device": parts[0],
+                            "mount": parts[5] if len(parts) > 5 else parts[-1],
+                            "total": parts[1],
+                            "used": parts[2],
+                            "free": parts[3],
+                            "use_percent": use_pct
+                        })
+                    except ValueError:
+                        pass
+        else:
+            info["errors"].append(f"df failed: {err}")
     
     return info
 

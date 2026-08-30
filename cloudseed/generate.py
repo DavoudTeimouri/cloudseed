@@ -198,9 +198,12 @@ def _cidr(netmask: str) -> int:
 
 
 def build_meta_data(cfg: TemplateConfig) -> str:
-    # Generate unique instance-id per config
-    instance_id = f"iid-{uuid.uuid4().hex[:8]}"
-    lines = [f"instance-id: {instance_id}"]
+    lines = []
+    # Only write instance-id if platform is NOT handling hostname
+    # When platform handles hostname, it also provides instance-id via metadata service
+    if not cfg.use_platform_hostname:
+        instance_id = f"iid-{uuid.uuid4().hex[:8]}"
+        lines.append(f"instance-id: {instance_id}")
     # Only write local-hostname if platform is NOT handling it
     if not cfg.use_platform_hostname:
         lines.append("local-hostname: " + (cfg.hostname or "cloudseed-vm"))

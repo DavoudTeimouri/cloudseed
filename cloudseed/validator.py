@@ -127,7 +127,7 @@ def validate_no_persistent_runs(config_dir: str) -> List[str]:
     warnings = []
     config_path = Path(config_dir)
     
-    # Check user-data
+    # Check user-data in the generated config directory
     user_data_path = config_path / "user-data"
     if user_data_path.exists():
         try:
@@ -147,20 +147,19 @@ def validate_no_persistent_runs(config_dir: str) -> List[str]:
         except Exception as e:
             warnings.append(f"user-data: read error: {e}")
     
-    # Check for cloud-init per-boot scripts
+    # Check for cloud-init per-boot scripts IN THE GENERATED CONFIG DIRECTORY
+    # (not system directories)
     boot_dirs = [
-        "/etc/cloud/cloud.cfg.d",
-        "/var/lib/cloud/scripts/per-boot",
-        "/var/lib/cloud/scripts/per-once",
-        "/var/lib/cloud/scripts/per-instance",
+        config_path / "per-boot",
+        config_path / "per-once", 
+        config_path / "per-instance",
     ]
     
     for d in boot_dirs:
-        p = Path(d)
-        if p.exists():
-            scripts = list(p.glob("*"))
+        if d.exists():
+            scripts = list(d.glob("*"))
             if scripts:
-                warnings.append(f"Found existing cloud-init scripts in {d}: {[s.name for s in scripts]}")
+                warnings.append(f"Found cloud-init scripts in {d}: {[s.name for s in scripts]}")
     
     return warnings
 
@@ -217,7 +216,8 @@ def validate_cloudseed_json(config_dir: str) -> List[str]:
     json_path = Path(config_dir) / "cloudseed.json"
     
     if not json_path.exists():
-        warnings.append("cloudseed.json not found - cannot re-use this configuration")
+        # cloudseed.json may be in parent directory (output root)
+        # This is not an error for fresh generations
         return warnings
     
     try:
