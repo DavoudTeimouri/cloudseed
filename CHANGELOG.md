@@ -5,6 +5,16 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-08-31
+
+### Added
+- Tab completion for output directory path (readline + glob) - type path and press Tab to autocomplete directories
+- Sample scripts: when "Use sample scripts" selected, choosing "No" to customize uses samples as-is without prompting for custom content
+- File overwrite-all option (menu option 4) applies to all remaining files in batch generation
+
+### Fixed
+- Version metadata consistency: all version files (__init__.py, pyproject.toml, version.txt, PyInstaller VSVersionInfo) now correctly report 2.0.2
+
 ## [2.0.1] - 2026-08-31
 
 ### Fixed
