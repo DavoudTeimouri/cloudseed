@@ -67,7 +67,7 @@ def print_banner(title: str = "") -> None:
     print(f"\n{line}")
     print(f"  {colorize('CloudSeed', Colors.BOLD + Colors.CYAN)} v{__version__}")
     print(f"  {colorize('cloud-init / Cloudbase-Init VM Template Generator', Colors.GRAY)}")
-    print(f"  {colorize('Config-only (no ISO) · vSphere · KVM · Physical', Colors.GRAY)}")
+    print(f"  {colorize('vSphere · KVM · Physical · Config Generator', Colors.GRAY)}")
     print(f"  {colorize('Zero dependencies — Python stdlib only', Colors.GRAY)}")
     if title:
         print(f"  {colorize(title, Colors.BOLD + Colors.WHITE)}")
@@ -531,39 +531,83 @@ WINDOWS_LOCALES = [
 
 
 def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool = True) -> str:
-    """Generic selector: shows numbered list, returns selected or custom entry."""
+    """Generic selector: shows numbered list with type-ahead filtering, returns selected or custom entry."""
     while True:
         check_shutdown()
-        print_section(prompt, "Select from list or type custom value")
+        print_section(prompt, "Type to filter, select number, or Enter for default")
         
-        for i, opt in enumerate(options, 1):
-            marker = " ✓" if opt == default else ""
-            print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{marker}")
+        # Type-ahead filtering
+        filter_text = ""
+        filtered_options = options
         
-        if allow_custom:
-            print(f"  {colorize('0', Colors.GRAY)}) Custom entry...")
-        print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
-        
-        val = input(f"  {colorize('Select', Colors.BOLD)} [Enter]: ").strip()
-        
-        if not val:
-            return default
-        
-        if val.isdigit():
-            idx = int(val)
-            if idx == 0 and allow_custom:
-                custom = input(f"  {colorize('Custom value', Colors.BOLD)}: ").strip()
-                if custom:
-                    return custom
+        while True:
+            check_shutdown()
+            # Clear screen area and redraw
+            print(f"\r{' ' * 80}\r", end="")  # Clear line
+            print_section(prompt, f"Type to filter, select number, or Enter for default")
+            
+            for i, opt in enumerate(filtered_options, 1):
+                marker = " ✓" if opt == default else ""
+                print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{marker}")
+            
+            if allow_custom:
+                print(f"  {colorize('0', Colors.GRAY)}) Custom entry...")
+            print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
+            if filter_text:
+                print(f"  {colorize('Filter', Colors.YELLOW)}: {filter_text}")
+            
+            # Get single character input for type-ahead
+            import sys
+            import termios
+            import tty
+            
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                ch = sys.stdin.read(1)
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            
+            if ch == '\r' or ch == '\n':  # Enter
+                if filter_text:
+                    # If filtered list has items, select first
+                    if filtered_options:
+                        return filtered_options[0]
+                    else:
+                        # No matches, treat as custom
+                        if allow_custom:
+                            return filter_text
+                        else:
+                            filter_text = ""
+                            continue
+                else:
+                    return default
+            elif ch == '\x7f' or ch == '\b':  # Backspace
+                filter_text = filter_text[:-1]
+            elif ch == '\x03':  # Ctrl+C
+                raise KeyboardInterrupt
+            elif ch.isprintable():
+                filter_text += ch
+            else:
+                # Number selection
+                if ch.isdigit():
+                    idx = int(ch)
+                    if idx == 0 and allow_custom:
+                        custom = input(f"\n  {colorize('Custom value', Colors.BOLD)}: ").strip()
+                        if custom:
+                            return custom
+                        continue
+                    elif 1 <= idx <= len(filtered_options):
+                        return filtered_options[idx - 1]
                 continue
-            elif 1 <= idx <= len(options):
-                return options[idx - 1]
-        
-        # Custom typed value
-        if allow_custom:
-            return val
-        # If not allowed, loop again
-        print_error("Please select a number from the list.")
+            
+            # Update filtered list
+            if filter_text:
+                filter_lower = filter_text.lower()
+                filtered_options = [opt for opt in options if filter_lower in opt.lower()]
+            else:
+                filtered_options = options
 
 
 def _ask_timezone(prompt: str, default: str = "", os_type: str = "linux") -> str:
@@ -696,7 +740,7 @@ def collect_interactive() -> TemplateConfig:
     cfg = TemplateConfig()
     
     while True:  # Main loop - allows returning to main menu
-        print_section("Main Menu", "Generate Configuration | Toolbox | Config Validator | Cloud-Init Doctor | Template Maker | Exit")
+        print_banner("Main Menu")
         
         # Main action menu
         main_actions = [

@@ -569,7 +569,7 @@ def build_readme(cfg: TemplateConfig, warnings: List[str] = None) -> str:
     plat = "VMware vSphere" if cfg.platform == "vsphere" else "KVM (libvirt)"
     osname = "Linux (cloud-init)" if cfg.os_type == "linux" else "Windows (Cloudbase-Init + Sysprep)"
     lines = [
-        "CloudSeed generated configuration (NO ISO -- config files only)",
+        "CloudSeed generated configuration",
         "=" * 64,
         f"Platform : {plat}",
         f"Guest OS : {osname}",

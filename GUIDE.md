@@ -1,6 +1,6 @@
-# CloudSeed Guide — Create & Apply Configurations (No ISO)
+# CloudSeed Guide — Create & Apply Configurations
 
-CloudSeed produces **configuration files only** — no seed ISO is built. This guide shows how to apply those files to new VMs on VMware vSphere, KVM, and Physical/Other, for both Linux (cloud-init) and Windows (Cloudbase-Init + Sysprep).
+CloudSeed produces **configuration files** for VM templates. This guide shows how to apply those files to new VMs on VMware vSphere, KVM, and Physical/Other, for both Linux (cloud-init) and Windows (Cloudbase-Init + Sysprep).
 
 ---
 
@@ -437,8 +437,8 @@ virt-install \
 # 3. Wait for first boot, verify
 ssh admin@<vm-ip> "cloud-init status --long"
 
-# 4. Clean for template
-ssh admin@<vm-ip> "sudo cloud-init clean --machine-id && sudo shutdown -h now"
+# 4. Clean for template (REQUIRED - run on the VM before converting to template)
+ssh admin@<vm-ip> "sudo cloud-init clean --machine-id --logs && sudo rm -f /etc/machine-id /var/lib/dbus/machine-id && sudo shutdown -h now"
 
 # 5. Convert to template (virsh, virt-manager, or vSphere)
 ```
