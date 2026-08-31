@@ -232,7 +232,7 @@ def _ask_list(prompt: str) -> List[str]:
 
 
 def _ask_overwrite(filepath: str) -> str:
-    """Ask user what to do when file exists. Returns 'overwrite', 'suffix', or 'skip'."""
+    """Ask user what to do when file exists. Returns 'overwrite', 'suffix', 'skip', or 'overwrite_all'."""
     from pathlib import Path
     check_shutdown()
     while True:
@@ -240,6 +240,7 @@ def _ask_overwrite(filepath: str) -> str:
         print("  1) Overwrite")
         print("  2) Add suffix (e.g., _1, _2)")
         print("  3) Skip this file")
+        print("  4) Overwrite ALL remaining files")
         choice = input("Select [1]: ").strip() or "1"
         check_shutdown()
         if choice == "1":
@@ -248,15 +249,28 @@ def _ask_overwrite(filepath: str) -> str:
             return "suffix"
         elif choice == "3":
             return "skip"
+        elif choice == "4":
+            return "overwrite_all"
         print("Invalid selection, try again.")
+
+
+# Module-level state for overwrite-all
+_overwrite_all_action = None
 
 
 def _get_unique_path(out_dir: str, filename: str) -> str | None:
     """Get a unique path, asking user if file exists. Returns None if skip."""
+    global _overwrite_all_action
     from pathlib import Path
     filepath = Path(out_dir) / filename
     if not filepath.exists():
         return str(filepath)
+    
+    # Check if overwrite-all is active
+    if _overwrite_all_action == "overwrite":
+        return str(filepath)
+    elif _overwrite_all_action == "skip":
+        return None
     
     action = _ask_overwrite(str(filepath))
     if action == "overwrite":
@@ -273,6 +287,9 @@ def _get_unique_path(out_dir: str, filename: str) -> str | None:
             counter += 1
     elif action == "skip":
         return None
+    elif action == "overwrite_all":
+        _overwrite_all_action = "overwrite"
+        return str(filepath)
 
 
 
@@ -1065,12 +1082,19 @@ def _configure_vsphere_scripts(cfg: TemplateConfig) -> bool:
     print_section("vSphere Pre/Post Customization Scripts", "Scripts that run before/after cloud-init during vSphere Guest Customization")
     cfg.use_sample_scripts = _ask_bool("Use sample scripts (customizable)", cfg.use_sample_scripts)
     if cfg.use_sample_scripts:
-        print("\nSample Pre-customization script (runs before cloud-init):")
-        print("# Example: Register with Satellite, install agents, etc.")
-        cfg.vsphere_pre_script = _ask("Pre-customization script (blank to skip)", "")
-        print("\nSample Post-customization script (runs after cloud-init):")
-        print("# Example: Join domain, run compliance checks, etc.")
-        cfg.vsphere_post_script = _ask("Post-customization script (blank to skip)", "")
+        # Ask if user wants to customize the sample scripts or use them as-is
+        customize = _ask_bool("Customize sample scripts? (No = use samples as-is)", False)
+        if customize:
+            print("\nSample Pre-customization script (runs before cloud-init):")
+            print("# Example: Register with Satellite, install agents, etc.")
+            cfg.vsphere_pre_script = _ask("Pre-customization script (blank to skip)", "")
+            print("\nSample Post-customization script (runs after cloud-init):")
+            print("# Example: Join domain, run compliance checks, etc.")
+            cfg.vsphere_post_script = _ask("Post-customization script (blank to skip)", "")
+        else:
+            # Use samples as-is, no custom input
+            cfg.vsphere_pre_script = ""
+            cfg.vsphere_post_script = ""
     return True
 
 

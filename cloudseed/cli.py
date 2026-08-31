@@ -168,6 +168,26 @@ def run_interactive(out_dir: str, plaintext: bool = False,
     # Default output directory in current path
     if not out_dir:
         default_out = os.path.join(os.getcwd(), "cloudseed-out")
+        # Enable tab completion for directory paths
+        try:
+            import readline
+            import glob
+            
+            def complete_path(text, state):
+                # Expand user and variables
+                text = os.path.expanduser(text)
+                # Find matching directories
+                matches = [d for d in glob.glob(text + '*') if os.path.isdir(d)]
+                if state < len(matches):
+                    return matches[state]
+                return None
+            
+            readline.set_completer_delims(' \t\n')
+            readline.set_completer(complete_path)
+            readline.parse_and_bind('tab: complete')
+        except ImportError:
+            pass  # readline not available (Windows default Python)
+        
         out_dir = input(f"\nOutput directory [{default_out}]: ").strip() or default_out
 
     warnings = validate_config(cfg)
