@@ -2,18 +2,25 @@
 
 from __future__ import annotations
 
-import os
 import json
-import subprocess
-import sys
+import os
 import platform
-import re
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+import subprocess
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
 
-from .model import print_section, print_info, print_warn, print_error, print_success, check_shutdown, colorize, Colors
 from .cli import detect_cloud_init_version, get_cloud_init_compatibility
+from .model import (
+    Colors,
+    check_shutdown,
+    colorize,
+    print_error,
+    print_info,
+    print_section,
+    print_success,
+    print_warn,
+)
 
 
 def run_cmd(cmd: List[str], timeout: int = 10) -> tuple:
@@ -40,18 +47,18 @@ def check_cloud_init_status() -> Dict[str, Any]:
         "errors": [],
         "warnings": [],
     }
-    
+
     # Check version
     version = detect_cloud_init_version()
     info["version"] = version
     info["compatibility"] = get_cloud_init_compatibility(version)
-    
+
     if version == "not found":
         info["errors"].append("cloud-init not installed")
         return info
-    
+
     info["enabled"] = True
-    
+
     # Check status
     rc, out, err = run_cmd(["cloud-init", "status", "--long"])
     if rc == 0:
@@ -60,37 +67,37 @@ def check_cloud_init_status() -> Dict[str, Any]:
             info["running"] = True
     else:
         info["warnings"].append(f"cloud-init status failed: {err}")
-    
+
     # Check cloud-init analyze
     rc, out, err = run_cmd(["cloud-init", "analyze", "show"])
     if rc == 0:
         info["analyze"] = out.strip()
-    
+
     # Check for errors in logs
     log_paths = [
         "/var/log/cloud-init.log",
         "/var/log/cloud-init-output.log",
     ]
-    
+
     for log_path in log_paths:
         if os.path.exists(log_path):
             try:
-                with open(log_path, 'r') as f:
+                with open(log_path) as f:
                     content = f.read()
-                
+
                 # Look for errors
                 error_lines = [l for l in content.split('\n') if 'ERROR' in l.upper() or 'FAIL' in l.upper()]
                 if error_lines:
                     info["errors"].extend([f"{log_path}: {l.strip()}" for l in error_lines[-10:]])
-                
+
                 # Look for warnings
                 warn_lines = [l for l in content.split('\n') if 'WARNING' in l.upper() or 'WARN' in l.upper()]
                 if warn_lines:
                     info["warnings"].extend([f"{log_path}: {l.strip()}" for l in warn_lines[-10:]])
-                    
+
             except Exception as e:
                 info["warnings"].append(f"Could not read {log_path}: {e}")
-    
+
     # Check cloud-init stages
     stages = [
         ("generator", "/var/lib/cloud/instance"),
@@ -99,7 +106,7 @@ def check_cloud_init_status() -> Dict[str, Any]:
         ("config", "/var/lib/cloud/instance/config"),
         ("final", "/var/lib/cloud/instance/final"),
     ]
-    
+
     info["stages"] = {}
     for stage, path in stages:
         p = Path(path)
@@ -111,7 +118,7 @@ def check_cloud_init_status() -> Dict[str, Any]:
             # Check for semaphore files
             semaphores = list(p.glob("*.json"))
             info["stages"][stage]["semaphores"] = [s.name for s in semaphores]
-    
+
     return info
 
 
@@ -123,13 +130,13 @@ def check_cloud_config() -> Dict[str, Any]:
         "errors": [],
         "warnings": [],
     }
-    
+
     config_dirs = [
         "/etc/cloud/cloud.cfg",
         "/etc/cloud/cloud.cfg.d",
         "/var/lib/cloud/instance/cloud-config.txt",
     ]
-    
+
     for d in config_dirs:
         p = Path(d)
         if p.exists():
@@ -138,7 +145,7 @@ def check_cloud_config() -> Dict[str, Any]:
             elif p.is_dir():
                 for f in p.glob("*.cfg"):
                     info["config_files"].append(str(f))
-    
+
     # Get merged config
     rc, out, err = run_cmd(["cloud-init", "query", "--all"])
     if rc == 0:
@@ -148,7 +155,7 @@ def check_cloud_config() -> Dict[str, Any]:
             info["merged_config"] = out
     else:
         info["warnings"].append(f"Could not query merged config: {err}")
-    
+
     return info
 
 
@@ -160,7 +167,7 @@ def check_boot_status() -> Dict[str, Any]:
         "errors": [],
         "warnings": [],
     }
-    
+
     # Check systemd services
     services = [
         "cloud-init-local.service",
@@ -169,7 +176,7 @@ def check_boot_status() -> Dict[str, Any]:
         "cloud-final.service",
         "cloud-init-hotplugd.service",
     ]
-    
+
     for svc in services:
         rc, out, err = run_cmd(["systemctl", "status", svc, "--no-pager"])
         info["services"][svc] = {
@@ -178,18 +185,18 @@ def check_boot_status() -> Dict[str, Any]:
         }
         if rc != 0 and "not found" not in err.lower() and "loaded" not in out.lower():
             info["warnings"].append(f"Service {svc}: {err[:100]}")
-    
+
     # Get boot time
     rc, out, err = run_cmd(["systemd-analyze", "time"])
     if rc == 0:
         info["boot_time"] = out.strip()
-    
+
     # Check for failed units
     rc, out, err = run_cmd(["systemctl", "--failed", "--no-pager"])
     if rc == 0 and out.strip():
         info["failed_units"] = out.strip()
         info["warnings"].append("Failed systemd units detected")
-    
+
     return info
 
 
@@ -202,19 +209,19 @@ def check_network_config() -> Dict[str, Any]:
         "errors": [],
         "warnings": [],
     }
-    
+
     # Check netplan
     netplan_dir = Path("/etc/netplan")
     if netplan_dir.exists():
         for f in netplan_dir.glob("*.yaml"):
             info["netplan"].append(str(f))
-    
+
     # Check networkd
     networkd_dir = Path("/etc/systemd/network")
     if networkd_dir.exists():
         for f in networkd_dir.glob("*.network"):
             info["networkd"][f.name] = str(f)
-    
+
     # Get current interfaces
     rc, out, err = run_cmd(["ip", "-j", "addr", "show"])
     if rc == 0:
@@ -222,7 +229,7 @@ def check_network_config() -> Dict[str, Any]:
             info["interfaces"] = json.loads(out)
         except json.JSONDecodeError:
             pass
-    
+
     return info
 
 
@@ -233,10 +240,10 @@ def check_disk_space() -> Dict[str, Any]:
         "warnings": [],
         "errors": [],
     }
-    
+
     import platform as plat
     system = plat.system().lower()
-    
+
     if system == "windows":
         # Windows disk space check using wmic or Get-PSDrive
         rc, out, err = run_cmd(["wmic", "logicaldisk", "get", "size,freespace,caption"])
@@ -274,7 +281,7 @@ def check_disk_space() -> Dict[str, Any]:
         rc, out, err = run_cmd(["df", "-h", "/", "/var", "/tmp"])
         if rc == 0:
             info["df_output"] = out.strip()
-            
+
             # Parse for low space
             for line in out.strip().split('\n')[1:]:
                 parts = line.split()
@@ -295,7 +302,7 @@ def check_disk_space() -> Dict[str, Any]:
                         pass
         else:
             info["errors"].append(f"df failed: {err}")
-    
+
     return info
 
 
@@ -303,7 +310,7 @@ def diagnose_all() -> Dict[str, Any]:
     """Run full diagnosis."""
     print_section("Cloud-Init Doctor: Full Diagnosis", "Running comprehensive cloud-init health check...")
     print()
-    
+
     results = {
         "timestamp": datetime.now().isoformat(),
         "platform": platform.platform(),
@@ -313,7 +320,7 @@ def diagnose_all() -> Dict[str, Any]:
         "network": check_network_config(),
         "disk": check_disk_space(),
     }
-    
+
     # Summary
     total_errors = (
         len(results["cloud_init"]["errors"]) +
@@ -321,7 +328,7 @@ def diagnose_all() -> Dict[str, Any]:
         len(results["boot"]["errors"]) +
         len(results["disk"]["errors"])
     )
-    
+
     total_warnings = (
         len(results["cloud_init"]["warnings"]) +
         len(results["cloud_config"]["warnings"]) +
@@ -329,7 +336,7 @@ def diagnose_all() -> Dict[str, Any]:
         len(results["network"]["warnings"]) +
         len(results["disk"]["warnings"])
     )
-    
+
     print(f"\n{colorize('='*60, Colors.BLUE)}")
     print(f"{colorize('DIAGNOSIS SUMMARY', Colors.BOLD + Colors.BLUE)}")
     print(f"{colorize('='*60, Colors.BLUE)}")
@@ -340,7 +347,7 @@ def diagnose_all() -> Dict[str, Any]:
     print(f"Errors: {total_errors}")
     print(f"Warnings: {total_warnings}")
     print(f"{colorize('='*60, Colors.BLUE)}")
-    
+
     if total_errors == 0 and total_warnings == 0:
         print_success("All checks passed!")
     else:
@@ -354,7 +361,7 @@ def diagnose_all() -> Dict[str, Any]:
             for cat in ["cloud_init", "cloud_config", "boot", "network", "disk"]:
                 for w in results[cat]["warnings"]:
                     print(f"  - [{cat}] {w}")
-    
+
     return results
 
 
@@ -373,10 +380,10 @@ def doctor_menu() -> int:
         print(f"  {colorize('7', Colors.CYAN)}) Save Diagnosis Report (JSON)")
         print(f"  {colorize('0', Colors.GRAY)}) ← Back to Main Menu")
         print()
-        
+
         choice = input(f"  {colorize('Select', Colors.BOLD)} [0]: ").strip() or "0"
         check_shutdown()
-        
+
         if choice == "1":
             diagnose_all()
             input("\nPress Enter to continue...")

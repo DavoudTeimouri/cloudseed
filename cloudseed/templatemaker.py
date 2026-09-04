@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import os
-import sys
 import platform
-import subprocess
 import shutil
-from typing import Optional, List, Tuple
-from pathlib import Path
+import subprocess
+from typing import Tuple
 
-from .model import print_section, print_info, print_warn, print_error, print_success, check_shutdown, _ask_bool, _ask, colorize, Colors, print_banner
-from .cli import detect_cloud_init_version, get_cloud_init_compatibility
+from .model import (
+    Colors,
+    _ask_bool,
+    check_shutdown,
+    colorize,
+    print_banner,
+    print_error,
+    print_info,
+    print_section,
+    print_success,
+    print_warn,
+)
 
 
 def detect_platform() -> str:
@@ -37,7 +45,7 @@ def detect_platform() -> str:
     ]
     for p in dmi_paths:
         try:
-            with open(p, 'r') as f:
+            with open(p) as f:
                 content = f.read().lower()
                 if "vmware" in content:
                     return "vsphere"
@@ -260,7 +268,7 @@ done
 echo "=== Done. Now convert VM to template ==="'''
         else:
             script_path = os.path.join(os.getcwd(), "cloudseed-template-cleanup-windows.bat")
-            content = '''@echo off
+            content = r'''@echo off
 REM CloudSeed VM Template Cleanup Script (Windows)
 REM Run as Administrator on VM BEFORE converting to template
 REM This script is safe to run multiple times
@@ -360,7 +368,7 @@ def template_maker_menu() -> int:
     """Main template maker menu."""
     while True:
         check_shutdown()
-        
+
         # Detect system info
         os_type = detect_os()
         virt_platform = detect_platform()

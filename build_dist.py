@@ -7,6 +7,12 @@ Usage:
 
 Output: dist/cloudseed  (Linux) or dist/cloudseed.exe (Windows).
 No bundled Python dependency in the package itself — runtime is stdlib-only.
+
+IMPORTANT: Cross-compilation NOT supported.
+- Linux binary MUST be built on Linux
+- Windows binary MUST be built on Windows
+PyInstaller does not support cross-compilation between platforms.
+Use GitHub Actions (or separate machines) to build both artifacts.
 """
 
 from __future__ import annotations
@@ -19,7 +25,7 @@ import os
 def main() -> int:
     icon_path = "cloudseed.ico" if os.path.exists("cloudseed.ico") else None
     version_file = "version.txt" if os.path.exists("version.txt") and sys.platform == "win32" else None
-    
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
@@ -27,17 +33,17 @@ def main() -> int:
         "--clean",
         "--noconfirm",
     ]
-    
+
     # Add icon for Windows
     if icon_path:
         cmd.extend(["--icon", icon_path])
-    
+
     # Add version info for Windows EXE
     if version_file:
         cmd.extend(["--version-file", version_file])
-    
+
     cmd.append("cloudseed/__main__.py")
-    
+
     print("Running:", " ".join(cmd))
     return subprocess.call(cmd)
 

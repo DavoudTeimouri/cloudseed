@@ -5,22 +5,119 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
+    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.8", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
+
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install
-        run: pip install -e . pytest
-      - name: Test
-        run: python -m pytest -q
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyinstaller
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v
+
+      - name: Run lint (ruff)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          pip install ruff
+          ruff check cloudseed/
+
+      - name: Run type check (mypy)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          pip install mypy
+          mypy cloudseed/
+
+  build:
+    name: Build Binary
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build binary
+        run: python build_dist.py
+
+      - name: Verify binary
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            ./dist/cloudseed.exe --version
+          else
+            ./dist/cloudseed --version
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudseed-${{ matrix.os }}
+          path: dist/
+          retention-days: 7
+
+  release:
+    name: Create Release
+    needs: [test, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cloudseed-ubuntu-latest
+          path: dist/linux
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cloudseed-windows-latest
+          path: dist/windows
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^## \[' CHANGELOG.md | head -1 | sed -E 's/## \[([^]]+)\] .*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: CloudSeed ${{ steps.version.outputs.version }}
+          body_path: CHANGELOG.md
+          files: |
+            dist/linux/cloudseed
+            dist/windows/cloudseed.exe
+          draft: false
+          prerelease: false

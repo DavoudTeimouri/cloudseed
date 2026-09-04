@@ -9,8 +9,7 @@ import os
 import uuid
 from typing import Any, Dict, List
 
-from .model import TemplateConfig, print_info, print_warn, _ask_overwrite
-
+from .model import TemplateConfig, _ask_overwrite, print_info, print_warn
 
 # --- minimal YAML emitter --------------------------------------------------
 
@@ -44,10 +43,7 @@ def yaml_dump(obj: Any, indent: int = 0) -> str:
             return pad + "{}"
         for k, v in obj.items():
             if isinstance(v, (dict, list)):
-                if isinstance(v, dict) and v:
-                    lines.append(f"{pad}{k}:")
-                    lines.append(yaml_dump(v, indent + 1))
-                elif isinstance(v, list) and v:
+                if isinstance(v, dict) and v or isinstance(v, list) and v:
                     lines.append(f"{pad}{k}:")
                     lines.append(yaml_dump(v, indent + 1))
                 else:
@@ -327,7 +323,7 @@ def build_vsphere_customization_spec(cfg: TemplateConfig) -> str:
     """Generate vSphere Customization Specification XML."""
     if not cfg.export_vsphere_spec or cfg.platform != "vsphere":
         return ""
-    
+
     # Build hostname section
     hostname_section = ""
     if cfg.use_platform_hostname:
@@ -345,7 +341,7 @@ def build_vsphere_customization_spec(cfg: TemplateConfig) -> str:
         <type>prefix</type>
         <value>{cfg.hostname_prefix}</value>
       </hostname>"""
-    
+
     # Build network section
     network_section = ""
     if cfg.let_platform_handle_network:
@@ -378,11 +374,11 @@ def build_vsphere_customization_spec(cfg: TemplateConfig) -> str:
           </ip>
         </adapter>
       </nicSettingMap>"""
-    
+
     # Build domain section (for Windows)
     domain_section = ""
     if cfg.os_type == "windows":
-        domain_section = f"""      <domain>
+        domain_section = """      <domain>
         <type>workgroup</type>
         <name>WORKGROUP</name>
       </domain>"""
@@ -391,16 +387,16 @@ def build_vsphere_customization_spec(cfg: TemplateConfig) -> str:
         <type>dns</type>
         <name></name>
       </domain>"""
-    
+
     # Build time zone
     timezone = cfg.sysprep_timezone if cfg.os_type == "windows" else cfg.timezone
-    
+
     # Build product key
     product_key = cfg.sysprep_product_key if cfg.os_type == "windows" else ""
     product_key_section = f"""      <productKey>{product_key}</productKey>""" if product_key else """      <productKey></productKey>"""
-    
+
     spec_name = cfg.vsphere_spec_name or "CloudSeed-Spec"
-    
+
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <CustomizationSpecItem xmlns="urn:vim25" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <spec>
@@ -465,7 +461,7 @@ echo "[$(date)] CloudSeed pre-customization started"
 echo "[$(date)] CloudSeed pre-customization completed"
 """
 
-SAMPLE_PRE_SCRIPT_WINDOWS = """@echo off
+SAMPLE_PRE_SCRIPT_WINDOWS = r"""@echo off
 REM CloudSeed vSphere Pre-Customization Script (Windows)
 REM This script runs BEFORE Cloudbase-Init during vSphere guest customization
 
@@ -511,7 +507,7 @@ echo "[$(date)] CloudSeed post-customization started"
 echo "[$(date)] CloudSeed post-customization completed"
 """
 
-SAMPLE_POST_SCRIPT_WINDOWS = """@echo off
+SAMPLE_POST_SCRIPT_WINDOWS = r"""@echo off
 REM CloudSeed vSphere Post-Customization Script (Windows)
 REM This script runs AFTER Cloudbase-Init completes during vSphere guest customization
 
@@ -535,10 +531,10 @@ def build_vsphere_scripts(cfg: TemplateConfig) -> tuple:
     """Generate vSphere pre/post customization scripts."""
     if not cfg.vsphere_pre_script and not cfg.vsphere_post_script:
         return "", ""
-    
+
     pre_script = cfg.vsphere_pre_script
     post_script = cfg.vsphere_post_script
-    
+
     # If using sample scripts, prepend the samples
     if cfg.use_sample_scripts:
         if cfg.os_type == "linux":
@@ -559,7 +555,7 @@ def build_vsphere_scripts(cfg: TemplateConfig) -> tuple:
                 post_script = SAMPLE_POST_SCRIPT_WINDOWS + "\nREM User customizations:\n" + post_script
             else:
                 post_script = SAMPLE_POST_SCRIPT_WINDOWS
-    
+
     return pre_script, post_script
 
 
@@ -591,13 +587,13 @@ def build_readme(cfg: TemplateConfig, warnings: List[str] = None) -> str:
             "  run-sysprep.bat                - launch Sysprep generalize",
             "  cloudseed.json                 - this config (re-usable)",
         ]
-    
+
     # Add warnings if any
     if warnings:
         lines += ["", "⚠️  Warnings:"]
         for w in warnings:
             lines.append(f"  - {w}")
-    
+
     lines += ["", "Apply (no ISO) - see GUIDE.md for full steps:"]
     if cfg.platform == "vsphere":
         lines += [
@@ -627,18 +623,19 @@ def build_readme(cfg: TemplateConfig, warnings: List[str] = None) -> str:
 
 def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) -> List[str]:
     import json as _json
-    from .cli import validate_config
-    from .model import _get_unique_path
-    
+
     # Reset overwrite-all state for new generation
     import cloudseed.model as model_mod
+
+    from .cli import validate_config
+    from .model import _get_unique_path
     model_mod._overwrite_all_action = None
-    
+
     # Organize output by platform/OS: e.g., out_dir/vsphere-linux/, out_dir/kvm-windows/, etc.
     plat_name = "vsphere" if cfg.platform == "vsphere" else cfg.platform
     subdir = os.path.join(out_dir, f"{plat_name}-{cfg.os_type}")
     os.makedirs(subdir, exist_ok=True)
-    
+
     # Check for existing cloudseed.json in the platform/OS subdir (collision detection)
     subdir_json = os.path.join(subdir, "cloudseed.json")
     if os.path.exists(subdir_json):
@@ -650,7 +647,7 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
                 print_info("Skipping generation to avoid collision.")
                 return []
             # If overwrite or suffix, continue (the _get_unique_path will handle it)
-    
+
     written: List[str] = []
 
     # Validate and get warnings
@@ -675,11 +672,11 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
         w("cloudbase-init-unattend.conf", build_cloudbase_conf(cfg, unattend=True))
         w("sysprep-unattend.xml", build_sysprep_unattend(cfg))
         w("run-sysprep.bat", build_sysprep_bat(cfg))
-    
+
     # vSphere Customization Spec
     if cfg.export_vsphere_spec and cfg.platform == "vsphere":
         w("vsphere-customization-spec.xml", build_vsphere_customization_spec(cfg))
-    
+
     # vSphere Pre/Post Customization Scripts
     if cfg.vsphere_pre_script or cfg.vsphere_post_script:
         pre_script, post_script = build_vsphere_scripts(cfg)

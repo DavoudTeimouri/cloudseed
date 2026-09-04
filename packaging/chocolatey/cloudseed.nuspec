@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>cloudseed</id>
+    <version>2.0.2</version>
+    <title>CloudSeed</title>
+    <authors>Davoud Teimouri</authors>
+    <owners>Davoud Teimouri</owners>
+    <licenseUrl>https://github.com/DavoudTeimouri/cloudseed/blob/main/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/DavoudTeimouri/cloudseed</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/DavoudTeimouri/cloudseed/main/cloudseed.ico</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>CloudSeed - Generate cloud-init / Cloudbase-Init VM templates for vSphere and KVM (Linux + Windows). Zero dependencies (stdlib only).</description>
+    <copyright>Copyright 2026</copyright>
+    <tags>cloud-init cloudbase-init vsphere kvm vm provisioning sysprep</tags>
+    <releaseNotes>See https://github.com/DavoudTeimouri/cloudseed/releases/tag/v2.0.2</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

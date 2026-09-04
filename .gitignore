@@ -11,3 +11,7 @@ out/
 dist/
 build/
 *.spec
+cloudseed-out/
+N/
+*.log
+cloudseed.ico
