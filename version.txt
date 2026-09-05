@@ -3,8 +3,8 @@
 
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(2, 0, 3, 0),
-    prodvers=(2, 0, 3, 0),
+    filevers=(2, 0, 4, 0),
+    prodvers=(2, 0, 4, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -19,12 +19,12 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'CloudSeed Project'),
           StringStruct('FileDescription', 'CloudSeed - cloud-init / Cloudbase-Init VM Template Generator'),
-          StringStruct('FileVersion', '2.0.3'),
+          StringStruct('FileVersion', '2.0.4'),
           StringStruct('InternalName', 'cloudseed'),
           StringStruct('LegalCopyright', 'Copyright (c) 2026 CloudSeed Contributors. MIT License.'),
           StringStruct('OriginalFilename', 'cloudseed.exe'),
           StringStruct('ProductName', 'CloudSeed'),
-          StringStruct('ProductVersion', '2.0.3'),
+          StringStruct('ProductVersion', '2.0.4'),
         ]
       )
     ]),

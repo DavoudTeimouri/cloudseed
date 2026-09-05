@@ -5,6 +5,15 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-09-05
+
+### Added
+- Single-key module selection: Space/Enter/number keys via _getch() (termios/msvcrt fallback), no Enter required for toggles.
+- Cross-platform key input (Linux, Windows, fallback).
+
+### Changed
+- Module selection loop now responds to Space (redraw), Enter (confirm), 1-9 (toggle), a/n/c/0/Esc.
+
 ## [2.0.3] - 2026-09-04
 
 ### Added
