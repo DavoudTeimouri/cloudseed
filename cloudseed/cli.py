@@ -158,6 +158,7 @@ def run_interactive(out_dir: str, plaintext: bool = False,
     # Setup signal handlers for graceful shutdown
     setup_signal_handlers()
 
+    print_banner("Welcome")
     result = collect_interactive()
 
     # If collect_interactive returns an int (from submenu), return it
