@@ -1,7 +1,7 @@
 class Cloudseed < Formula
   desc "CloudSeed - Generate cloud-init / Cloudbase-Init VM templates for vSphere and KVM (Linux + Windows). Zero dependencies (stdlib only)."
   homepage "https://github.com/DavoudTeimouri/cloudseed"
-  url "https://github.com/DavoudTeimouri/cloudseed/archive/refs/tags/v2.0.2.tar.gz"
+  url "https://github.com/DavoudTeimouri/cloudseed/archive/refs/tags/v2.0.3.tar.gz"
   sha256 "REPLACE_WITH_ACTUAL_SHA256"
   license "MIT"
   head "https://github.com/DavoudTeimouri/cloudseed.git", branch: "main"

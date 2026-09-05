@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $packageName = 'cloudseed'
-$url = 'https://github.com/DavoudTeimouri/cloudseed/releases/download/v2.0.2/cloudseed.exe'
+$url = 'https://github.com/DavoudTeimouri/cloudseed/releases/download/v2.0.3/cloudseed.exe'
 $checksum = 'REPLACE_WITH_ACTUAL_SHA256'
 $checksumType = 'sha256'
 $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition

@@ -87,86 +87,94 @@ def _center_text(text: str, width: int) -> str:
     return ' ' * max(0, pad) + text
 
 
+def _plain_len(text: str) -> int:
+    """Return visible-ish length after stripping ANSI escape sequences."""
+    import re
+    return len(re.sub(r"\x1b\[[0-9;]*m", "", text))
+
+
+def _fit(text: str, width: int) -> str:
+    """Pad/truncate plain text to fit the frame width."""
+    raw_len = _plain_len(text)
+    if raw_len > width:
+        return text[:max(0, width - 1)] + "…"
+    return text + " " * (width - raw_len)
+
+
+def _center_line(text: str, width: int) -> str:
+    raw_len = _plain_len(text)
+    if raw_len >= width:
+        return _fit(text, width)
+    left = (width - raw_len) // 2
+    right = width - raw_len - left
+    return " " * left + text + " " * right
+
+
+def _frame_line(text: str, width: int, color: str = Colors.BLUE, center: bool = False) -> None:
+    body = _center_line(text, width) if center else _fit(text, width)
+    print(f"  {colorize(BOX['v'], color)} {body} {colorize(BOX['v'], color)}")
+
+
 def print_banner(title: str = "", platform: str = "", os_type: str = "", modules_count: int = 0) -> None:
-    """Print CloudSeed modern box banner with ASCII logo and status bar."""
+    """Print CloudSeed banner with clean logo, tagline, and status."""
     from . import __version__
-    width = _box_width() - 2  # Account for side borders
-    inner_w = width
 
-    # ASCII Logo
+    inner_w = min(_box_width() - 4, 76)
     logo = [
-        "██████╗ ███████╗████████╗███████╗██████╗  ██████╗ ██████╗ ███████╗",
-        "██╔══██╗██╔════╝╚══██╔══╝██╔════╝██╔══██╗██╔═══██╗██╔══██╗██╔════╝",
-        "██████╔╝█████╗     ██║   █████╗  ██████╔╝██║   ██║██████╔╝█████╗  ",
-        "██╔══██╗██╔══╝     ██║   ██╔══╝  ██╔══██╗██║   ██║██╔══██╗██╔══╝  ",
-        "██████╔╝███████╗   ██║   ███████╗██║  ██║╚██████╔╝██║  ██║███████╗",
-        "╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝",
+        "   _____ _                 _ _____              _ ",
+        "  / ____| |               | / ____|            | |",
+        " | |    | | ___  _   _  __| | (___   ___  ___  __| |",
+        " | |    | |/ _ \\| | | |/ _` |\\___ \\ / _ \\/ _ \\/ _` |",
+        " | |____| | (_) | |_| | (_| |____) |  __/  __/ (_| |",
+        "  \\_____|_|\\___/ \\__,_|\\__,_|_____/ \\___|\\___|\\__,_|",
     ]
-
-    print()  # Top spacing
-    # Top border
-    print(f"  {colorize(BOX['tl'] + BOX['h'] * inner_w + BOX['tr'], Colors.CYAN)}")
-
-    # Logo lines
-    for line in logo:
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(line.ljust(inner_w - 1), Colors.BOLD + Colors.CYAN)} {colorize(BOX['v'], Colors.CYAN)}")
-
-    # Empty line
-    print(f"  {colorize(BOX['v'], Colors.CYAN)} {' ' * inner_w} {colorize(BOX['v'], Colors.CYAN)}")
-
-    # Tagline
     tagline = f"cloud-init / Cloudbase-Init VM Template Generator  v{__version__}"
-    print(f"  {colorize(BOX['v'], Colors.CYAN)} {_center_text(tagline, inner_w)} {colorize(BOX['v'], Colors.CYAN)}")
+    platforms = "vSphere  •  KVM  •  Physical  •  zero runtime deps"
 
-    platforms = "vSphere  •  KVM  •  Physical  •  Zero deps (stdlib)"
-    print(f"  {colorize(BOX['v'], Colors.CYAN)} {_center_text(platforms, inner_w)} {colorize(BOX['v'], Colors.CYAN)}")
+    print()
+    print(f"  {colorize(BOX['tl'] + BOX['h'] * (inner_w + 2) + BOX['tr'], Colors.CYAN)}")
+    for line in logo:
+        _frame_line(line, inner_w, Colors.CYAN, center=True)
+    _frame_line("", inner_w, Colors.CYAN)
+    _frame_line(tagline, inner_w, Colors.CYAN, center=True)
+    _frame_line(platforms, inner_w, Colors.CYAN, center=True)
+    print(f"  {colorize(BOX['l'] + BOX['h'] * (inner_w + 2) + BOX['r'], Colors.CYAN)}")
 
-    # Middle separator
-    print(f"  {colorize(BOX['l'] + BOX['h'] * inner_w + BOX['r'], Colors.CYAN)}")
-
-    # Status bar
     if platform or os_type or modules_count:
         status_parts = []
         if platform:
             status_parts.append(f"Platform: {platform.capitalize()}")
         if os_type:
             status_parts.append(f"OS: {os_type.capitalize()}")
-        if modules_count:
-            status_parts.append(f"Modules: {modules_count} selected")
-        status = "  ".join(status_parts)
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(status.ljust(inner_w), Colors.BOLD + Colors.WHITE)} {colorize(BOX['v'], Colors.CYAN)}")
+        status_parts.append(f"Modules: {modules_count}")
+        _frame_line("  ".join(status_parts), inner_w, Colors.CYAN)
     elif title:
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(title.center(inner_w), Colors.BOLD + Colors.WHITE)} {colorize(BOX['v'], Colors.CYAN)}")
+        _frame_line(title, inner_w, Colors.CYAN, center=True)
     else:
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {' ' * inner_w} {colorize(BOX['v'], Colors.CYAN)}")
-
-    # Bottom border
-    print(f"  {colorize(BOX['bl'] + BOX['h'] * inner_w + BOX['br'], Colors.CYAN)}")
+        _frame_line("", inner_w, Colors.CYAN)
+    print(f"  {colorize(BOX['bl'] + BOX['h'] * (inner_w + 2) + BOX['br'], Colors.CYAN)}")
     print()
 
 
 def print_frame(title: str, description: str = "", lines: list = None, footer: str = "", width: int = None) -> None:
-    """Print a framed section with title, optional description, content lines, and footer."""
+    """Print compact framed section. No empty middle row when there is no body."""
     if width is None:
-        width = _box_width() - 2
+        width = min(_box_width() - 4, 76)
     inner_w = width
+    title_display = f" {title} "
+    title_len = _plain_len(title_display)
+    if title_len > inner_w:
+        title_display = title_display[:inner_w - 1] + "…"
+        title_len = inner_w
+    left = max(0, (inner_w - title_len) // 2)
+    right = max(0, inner_w - title_len - left)
 
     print()
-    # Top border with title
-    title_display = f" {title} "
-    title_len = len(title_display)
-    if title_len > inner_w - 4:
-        title_display = title_display[:inner_w - 7] + "..."
-        title_len = len(title_display)
-    left_pad = (inner_w - title_len) // 2
-    right_pad = inner_w - title_len - left_pad
-    print(f"  {colorize(BOX['lt'] + BOX['lh'] * left_pad + title_display + BOX['lh'] * right_pad + BOX['rt'], Colors.BLUE)}")
-
+    print(f"  {colorize(BOX['lt'] + BOX['lh'] * left + title_display + BOX['lh'] * right + BOX['rt'], Colors.BLUE)}")
     if description:
-        print(f"  {colorize(BOX['lv'], Colors.BLUE)} {colorize(description.ljust(inner_w), Colors.GRAY)} {colorize(BOX['lv'], Colors.BLUE)}")
-        print(f"  {colorize(BOX['ll'] + BOX['lh'] * inner_w + BOX['rl'], Colors.BLUE)}")
-
+        _frame_line(description, inner_w, Colors.BLUE)
     if lines:
+        print(f"  {colorize(BOX['ll'] + BOX['lh'] * inner_w + BOX['rl'], Colors.BLUE)}")
         for line in lines:
             prefix = ""
             if line.startswith("▸ "):
@@ -181,18 +189,15 @@ def print_frame(title: str, description: str = "", lines: list = None, footer: s
             elif line.startswith("  "):
                 prefix = "  "
                 line = line[2:]
-            print(f"  {colorize(BOX['lv'], Colors.BLUE)} {prefix}{line.ljust(inner_w - len(prefix))} {colorize(BOX['lv'], Colors.BLUE)}")
-
+            _frame_line(prefix + line, inner_w, Colors.BLUE)
     if footer:
         print(f"  {colorize(BOX['ll'] + BOX['lh'] * inner_w + BOX['rl'], Colors.BLUE)}")
-        print(f"  {colorize(BOX['lv'], Colors.BLUE)} {colorize(footer.ljust(inner_w), Colors.GRAY)} {colorize(BOX['lv'], Colors.BLUE)}")
-
-    # Bottom border
+        _frame_line(footer, inner_w, Colors.BLUE)
     print(f"  {colorize(BOX['lb'] + BOX['lh'] * inner_w + BOX['rb'], Colors.BLUE)}")
 
 
 def print_section(title: str, description: str = "") -> None:
-    """Print a simple section header (legacy, for compatibility)."""
+    """Print a compact framed section header."""
     print_frame(title, description)
 
 
@@ -661,83 +666,68 @@ WINDOWS_LOCALES = [
 
 
 def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool = True) -> str:
-    """Generic selector: shows numbered list with type-ahead filtering, returns selected or custom entry."""
+    """Selector with compact list, filtering, paging, and custom values."""
+    filter_text = ""
+    page = 0
+    page_size = 12
+
+    def visible() -> list:
+        if filter_text:
+            f = filter_text.lower()
+            return [opt for opt in options if f in opt.lower()]
+        return list(options)
+
     while True:
         check_shutdown()
-        print_section(prompt, "Type to filter, select number, or Enter for default")
+        matches = visible()
+        max_page = max(0, (len(matches) - 1) // page_size)
+        page = min(page, max_page)
+        shown = matches[page * page_size:(page + 1) * page_size]
+        lines = []
+        for i, opt in enumerate(shown, 1):
+            absolute = page * page_size + i
+            marker = "✓" if opt == default else " "
+            lines.append(f"{marker} {absolute:>2}) {opt}")
+        if not shown:
+            lines.append("  No matches")
+        if len(matches) > page_size:
+            lines.append(f"  ... {len(matches) - len(shown)} total matches, page {page + 1}/{max_page + 1}")
 
-        # Type-ahead filtering
-        filter_text = ""
-        filtered_options = options
+        footer_parts = [f"Enter={default or 'default'}"]
+        if allow_custom:
+            footer_parts.append("0=custom")
+        footer_parts.extend(["/=filter", "n/p=page", "b=back"])
+        desc = f"Filter: {filter_text or '-'}  Matches: {len(matches)}"
+        print_frame(prompt, desc, lines, "  ".join(footer_parts))
 
-        while True:
-            check_shutdown()
-            # Clear screen area and redraw
-            print(f"\r{' ' * 80}\r", end="")  # Clear line
-            print_section(prompt, "Type to filter, select number, or Enter for default")
-
-            for i, opt in enumerate(filtered_options, 1):
-                marker = " ✓" if opt == default else ""
-                print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{marker}")
-
-            if allow_custom:
-                print(f"  {colorize('0', Colors.GRAY)}) Custom entry...")
-            print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
-            if filter_text:
-                print(f"  {colorize('Filter', Colors.YELLOW)}: {filter_text}")
-
-            # Get single character input for type-ahead
-            import sys
-            import termios
-            import tty
-
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(fd)
-                ch = sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-            if ch == '\r' or ch == '\n':  # Enter
-                if filter_text:
-                    # If filtered list has items, select first
-                    if filtered_options:
-                        return filtered_options[0]
-                    else:
-                        # No matches, treat as custom
-                        if allow_custom:
-                            return filter_text
-                        else:
-                            filter_text = ""
-                            continue
-                else:
-                    return default
-            elif ch == '\x7f' or ch == '\b':  # Backspace
-                filter_text = filter_text[:-1]
-            elif ch == '\x03':  # Ctrl+C
-                raise KeyboardInterrupt
-            elif ch.isprintable():
-                filter_text += ch
-            else:
-                # Number selection
-                if ch.isdigit():
-                    idx = int(ch)
-                    if idx == 0 and allow_custom:
-                        custom = input(f"\n  {colorize('Custom value', Colors.BOLD)}: ").strip()
-                        if custom:
-                            return custom
-                        continue
-                    elif 1 <= idx <= len(filtered_options):
-                        return filtered_options[idx - 1]
-                continue
-
-            # Update filtered list
-            if filter_text:
-                filter_lower = filter_text.lower()
-                filtered_options = [opt for opt in options if filter_lower in opt.lower()]
-            else:
-                filtered_options = options
+        raw = input(f"  {colorize('Select', Colors.BOLD)}: ").strip()
+        if not raw:
+            return default
+        low = raw.lower()
+        if low in ("b", "back", "esc"):
+            return default
+        if low == "n":
+            page = min(max_page, page + 1)
+            continue
+        if low == "p":
+            page = max(0, page - 1)
+            continue
+        if low.startswith("/"):
+            filter_text = low[1:]
+            page = 0
+            continue
+        if allow_custom and raw == "0":
+            custom = input(f"  {colorize('Custom value', Colors.BOLD)}: ").strip()
+            if custom:
+                return custom
+            continue
+        if raw.isdigit():
+            idx = int(raw)
+            if 1 <= idx <= len(matches):
+                return matches[idx - 1]
+        # Treat any non-command text as filter input.
+        filter_text = raw
+        page = 0
 
 
 def _ask_timezone(prompt: str, default: str = "", os_type: str = "linux") -> str:
