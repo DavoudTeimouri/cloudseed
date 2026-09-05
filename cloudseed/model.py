@@ -60,6 +60,28 @@ def colorize(text: str, color: str) -> str:
     return text
 
 
+def _getch() -> str:
+    """Read a single character from stdin without Enter (cross-platform)."""
+    try:
+        import termios, tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        return ch
+    except ImportError:
+        # Windows fallback
+        try:
+            import msvcrt
+            return msvcrt.getwch()
+        except ImportError:
+            # Last resort: line-buffered input
+            return sys.stdin.read(1)
+
+
 # Box-drawing characters
 BOX = {
     'tl': '╔', 'tr': '╗', 'bl': '╚', 'br': '╝',
@@ -819,53 +841,62 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
         footer = "[Space] Toggle  [c] Configure selected  [a] All  [n] None  [Enter] Confirm  [Esc] Back"
         print_frame("MODULE SELECTION", f"Platform: {platform}  OS: {os_type}  [{len(selected)}/{len(available)} modules selected]", lines, footer)
 
-        sel = input(f"  {colorize('Selection', Colors.BOLD)}: ").strip().lower()
-        if not sel:
+        ch = _getch()
+        if not ch:
             continue
-        if sel == "0" or sel == "esc":
+        ch = ch.lower()
+        if ch in ("0", "\x1b"):  # 0 or ESC
             return "BACK"
-        if sel == "a":
+        if ch == "a":
             selected = set(module_ids)
             continue
-        if sel == "n":
+        if ch == "n":
             selected = set()
             continue
-        if sel == "c":
+        if ch == "c":
             if not selected:
                 print_warn("No modules selected. Select at least one module.")
                 continue
             return list(selected)
-
-        try:
-            idxs = [int(x) for x in sel.split() if x.isdigit()]
-            for idx in idxs:
-                if 1 <= idx <= len(module_ids):
-                    mid = module_ids[idx - 1]
-                    if mid in selected:
-                        selected.remove(mid)
-                    else:
-                        selected.add(mid)
-                        # Handle platform module priority: auto-disable cloud-init equivalent
-                        if mid == "platform_hostname" and "hostname" in selected:
-                            selected.remove("hostname")
-                            print_info("Platform Hostname selected -> Hostname module auto-disabled (platform has priority)")
-                        elif mid == "platform_network" and "network" in selected:
-                            selected.remove("network")
-                            print_info("Platform Network selected -> Network module auto-disabled (platform has priority)")
-                        elif mid == "platform_ntp" and "ntp" in selected:
-                            selected.remove("ntp")
-                            print_info("Platform NTP selected -> NTP module auto-disabled (platform has priority)")
-                        elif mid == "hostname" and "platform_hostname" in selected:
-                            selected.remove("platform_hostname")
-                            print_info("Hostname selected -> Platform Hostname auto-disabled")
-                        elif mid == "network" and "platform_network" in selected:
-                            selected.remove("platform_network")
-                            print_info("Network selected -> Platform Network auto-disabled")
-                        elif mid == "ntp" and "platform_ntp" in selected:
-                            selected.remove("platform_ntp")
-                            print_info("NTP selected -> Platform NTP auto-disabled")
-        except (ValueError, IndexError):
-            print_error("Invalid selection, try again.")
+        if ch in (" ", "\r", "\n"):  # Space or Enter
+            # If Space, toggle first item? Actually Enter confirms, Space toggles.
+            # We'll handle number keys below for toggling specific items
+            if ch in ("\r", "\n"):  # Enter - confirm
+                if not selected:
+                    print_warn("No modules selected. Select at least one module.")
+                    continue
+                return list(selected)
+            # Space - just redraw, let number keys handle toggling
+            continue
+        if ch.isdigit():
+            idx = int(ch)
+            if 1 <= idx <= len(module_ids):
+                mid = module_ids[idx - 1]
+                if mid in selected:
+                    selected.remove(mid)
+                else:
+                    selected.add(mid)
+                    # Handle platform module priority: auto-disable cloud-init equivalent
+                    if mid == "platform_hostname" and "hostname" in selected:
+                        selected.remove("hostname")
+                        print_info("Platform Hostname selected -> Hostname module auto-disabled (platform has priority)")
+                    elif mid == "platform_network" and "network" in selected:
+                        selected.remove("network")
+                        print_info("Platform Network selected -> Network module auto-disabled (platform has priority)")
+                    elif mid == "platform_ntp" and "ntp" in selected:
+                        selected.remove("ntp")
+                        print_info("Platform NTP selected -> NTP module auto-disabled (platform has priority)")
+                    elif mid == "hostname" and "platform_hostname" in selected:
+                        selected.remove("platform_hostname")
+                        print_info("Hostname selected -> Platform Hostname auto-disabled")
+                    elif mid == "network" and "platform_network" in selected:
+                        selected.remove("platform_network")
+                        print_info("Network selected -> Platform Network auto-disabled")
+                    elif mid == "ntp" and "platform_ntp" in selected:
+                        selected.remove("platform_ntp")
+                        print_info("NTP selected -> Platform NTP auto-disabled")
+            continue
+        # ignore other keys
 
 
 def collect_interactive() -> TemplateConfig:
