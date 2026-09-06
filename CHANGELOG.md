@@ -5,6 +5,16 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2026-09-05
+
+### Added
+- Readline tab-completion for timezone, locale, keyboard layout, and disk device selectors.
+- Interactive list discovery: type '?' at any selector prompt to list available options with numbering.
+- Numbered shortcut selection retained as alternative to tab-completion.
+
+### Changed
+- Replaced raw terminal character capture with standard library readline completion for reliable operation across SSH, Docker, and terminal emulators.
+
 ## [2.0.2] - 2026-08-31
 
 ### Added
