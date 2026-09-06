@@ -661,83 +661,71 @@ WINDOWS_LOCALES = [
 
 
 def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool = True) -> str:
-    """Generic selector: shows numbered list with type-ahead filtering, returns selected or custom entry."""
-    while True:
-        check_shutdown()
-        print_section(prompt, "Type to filter, select number, or Enter for default")
+    """Selector with readline tab-completion and numbered fallback."""
+    try:
+        import readline
 
-        # Type-ahead filtering
-        filter_text = ""
-        filtered_options = options
+        # Completer for options
+        def completer(text: str, state: int):
+            matches = [opt for opt in options if opt.lower().startswith(text.lower())]
+            return matches[state] if state < len(matches) else None
 
+        old_completer = readline.get_completer()
+        old_delims = readline.get_completer_delims()
+        readline.set_completer_delims(' \t\n')
+        readline.set_completer(completer)
+        readline.parse_and_bind('tab: complete')
+    except Exception:
+        completer = None
+
+    try:
         while True:
             check_shutdown()
-            # Clear screen area and redraw
-            print(f"\r{' ' * 80}\r", end="")  # Clear line
-            print_section(prompt, "Type to filter, select number, or Enter for default")
-
-            for i, opt in enumerate(filtered_options, 1):
-                marker = " ✓" if opt == default else ""
-                print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{marker}")
-
-            if allow_custom:
-                print(f"  {colorize('0', Colors.GRAY)}) Custom entry...")
-            print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
-            if filter_text:
-                print(f"  {colorize('Filter', Colors.YELLOW)}: {filter_text}")
-
-            # Get single character input for type-ahead
-            import sys
-            import termios
-            import tty
-
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(fd)
-                ch = sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-            if ch == '\r' or ch == '\n':  # Enter
-                if filter_text:
-                    # If filtered list has items, select first
-                    if filtered_options:
-                        return filtered_options[0]
-                    else:
-                        # No matches, treat as custom
-                        if allow_custom:
-                            return filter_text
-                        else:
-                            filter_text = ""
-                            continue
-                else:
-                    return default
-            elif ch == '\x7f' or ch == '\b':  # Backspace
-                filter_text = filter_text[:-1]
-            elif ch == '\x03':  # Ctrl+C
-                raise KeyboardInterrupt
-            elif ch.isprintable():
-                filter_text += ch
+            print()
+            print_info(f"{prompt} (Press Tab to auto-complete, '?' to list)")
+            if default:
+                prompt_str = f"  {colorize('Select', Colors.BOLD)} [{default}]: "
             else:
-                # Number selection
-                if ch.isdigit():
-                    idx = int(ch)
-                    if idx == 0 and allow_custom:
-                        custom = input(f"\n  {colorize('Custom value', Colors.BOLD)}: ").strip()
-                        if custom:
-                            return custom
-                        continue
-                    elif 1 <= idx <= len(filtered_options):
-                        return filtered_options[idx - 1]
+                prompt_str = f"  {colorize('Select', Colors.BOLD)}: "
+
+            val = input(prompt_str).strip()
+            if not val:
+                if default:
+                    return default
                 continue
 
-            # Update filtered list
-            if filter_text:
-                filter_lower = filter_text.lower()
-                filtered_options = [opt for opt in options if filter_lower in opt.lower()]
-            else:
-                filtered_options = options
+            if val == "?":
+                print()
+                for i, opt in enumerate(options[:24], 1):
+                    marker = " (default)" if opt == default else ""
+                    print(f"   {i:2d}) {opt}{marker}")
+                if len(options) > 24:
+                    print(f"   ... and {len(options) - 24} more (use Tab to complete)")
+                continue
+
+            # Numbered selection
+            if val.isdigit():
+                idx = int(val)
+                if 1 <= idx <= len(options):
+                    return options[idx - 1]
+                print_warn("Number out of range.")
+                continue
+
+            # Exact or partial match
+            exact = [opt for opt in options if opt.lower() == val.lower()]
+            if exact:
+                return exact[0]
+
+            if allow_custom:
+                return val
+            print_warn("Invalid selection. Try again or press Tab.")
+    finally:
+        try:
+            import readline
+            readline.set_completer(old_completer)
+            readline.set_completer_delims(old_delims)
+        except Exception:
+            pass
 
 
 def _ask_timezone(prompt: str, default: str = "", os_type: str = "linux") -> str:
