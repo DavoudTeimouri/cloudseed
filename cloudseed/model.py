@@ -662,6 +662,7 @@ WINDOWS_LOCALES = [
 
 def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool = True) -> str:
     """Generic selector: shows numbered list with type-ahead filtering, returns selected or custom entry."""
+    import sys
     while True:
         check_shutdown()
         print_section(prompt, "Type to filter, select number, or Enter for default")
@@ -669,6 +670,42 @@ def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool 
         # Type-ahead filtering
         filter_text = ""
         filtered_options = options
+
+        # If not a TTY (e.g., piped input), fall back to simple numbered menu
+        if not sys.stdin.isatty():
+            while True:
+                check_shutdown()
+                print()
+                print_info(f"{prompt} (select number or type value)")
+                if default:
+                    print_info(f"Default: {default}")
+                for i, opt in enumerate(options, 1):
+                    marker = " (default)" if opt == default else ""
+                    print(f"  {i}) {opt}{marker}")
+                if allow_custom:
+                    print("  0) Custom value")
+                try:
+                    val = input(f"  {colorize('Select', Colors.BOLD)}: ").strip()
+                except EOFError:
+                    return default
+                if not val:
+                    if default:
+                        return default
+                    continue
+                if val == "0" and allow_custom:
+                    custom = input(f"  {colorize('Custom value', Colors.BOLD)}: ").strip()
+                    if custom:
+                        return custom
+                    continue
+                if val.isdigit():
+                    idx = int(val)
+                    if 1 <= idx <= len(options):
+                        return options[idx - 1]
+                # treat as custom if allowed
+                if allow_custom:
+                    return val
+                print_error("Invalid selection, try again.")
+            # not reached
 
         while True:
             check_shutdown()
@@ -687,7 +724,6 @@ def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool 
                 print(f"  {colorize('Filter', Colors.YELLOW)}: {filter_text}")
 
             # Get single character input for type-ahead
-            import sys
             import termios
             import tty
 
