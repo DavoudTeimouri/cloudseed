@@ -123,7 +123,7 @@ This writes (config-only, no ISO):
 - **No ISO** is produced — CloudSeed is config-only. Full apply steps in [GUIDE.md](GUIDE.md).
 - **Conflict avoidance**: Enable "Let Platform Handle..." modules to let vSphere/KVM manage hostname/network/NTP instead of cloud-init, avoiding duplicate configuration.
 - **Overwrite protection**: If output file exists, CloudSeed asks: Overwrite / Add suffix / Skip / Overwrite ALL.
-- **Selector lists for known-value fields** — timezone, locale, keyboard layout, disk device/partition show numbered lists; user picks by number or types custom value. Type-ahead filtering for timezone (~600 IANA zones).
+- **Selector lists for known-value fields** — timezone (hierarchical region→zone for Linux, flat list for Windows), locale, keyboard layout, disk device/partition show numbered lists; user picks by number or types custom value. Line-input filtering works in all terminals (SSH, Docker, non-TTY).
 - **Post-export validation** — After generating configs, CloudSeed automatically runs Config Validator on the output directory and shows summary.
 
 ## Command-line flags

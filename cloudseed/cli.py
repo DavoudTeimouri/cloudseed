@@ -157,8 +157,7 @@ def run_interactive(out_dir: str, plaintext: bool = False,
                     write_cloud_init_path: bool = False) -> int:
     # Setup signal handlers for graceful shutdown
     setup_signal_handlers()
-
-    print_banner("Welcome")
+    # print_banner("Welcome")  # Removed duplicate welcome banner
     result = collect_interactive()
 
     # If collect_interactive returns an int (from submenu), return it

@@ -514,6 +514,7 @@ LINUX_TIMEZONES = [
     "Asia/Singapore",
     "Asia/Dubai",
     "Asia/Kolkata",
+    "Asia/Tehran",
     "Australia/Sydney",
     "Australia/Melbourne",
     "Australia/Perth",
@@ -661,126 +662,133 @@ WINDOWS_LOCALES = [
 
 
 def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool = True) -> str:
-    """Generic selector: shows numbered list with type-ahead filtering, returns selected or custom entry."""
-    import sys
+    """Select from a numbered list using line input.
+
+    Line input keeps Backspace and terminal editing portable. It also works in
+    non-TTY environments, where raw ``termios`` input crashes.
+    """
+    options = [str(option) for option in options]
+    default = str(default)
+    if not options:
+        return default
+
+    filter_text = ""
     while True:
         check_shutdown()
-        print_section(prompt, "Type to filter, select number, or Enter for default")
+        filtered_options = [
+            option for option in options
+            if not filter_text or filter_text.casefold() in option.casefold()
+        ]
 
-        # Type-ahead filtering
-        filter_text = ""
-        filtered_options = options
+        print_section(prompt, "Type filter, select number, or Enter for default")
+        for i, option in enumerate(filtered_options, 1):
+            marker = " ✓" if option == default else ""
+            print(f"  {colorize(str(i), Colors.CYAN)}) {option}{marker}")
 
-        # If not a TTY (e.g., piped input), fall back to simple numbered menu
-        if not sys.stdin.isatty():
-            while True:
-                check_shutdown()
-                print()
-                print_info(f"{prompt} (select number or type value)")
-                if default:
-                    print_info(f"Default: {default}")
-                for i, opt in enumerate(options, 1):
-                    marker = " (default)" if opt == default else ""
-                    print(f"  {i}) {opt}{marker}")
-                if allow_custom:
-                    print("  0) Custom value")
+        if allow_custom:
+            print(f"  {colorize('0', Colors.GRAY)}) Custom entry...")
+        print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
+        if filter_text:
+            print(f"  {colorize('Filter', Colors.YELLOW)}: {filter_text}")
+
+        try:
+            reply = input("  Selection: ").strip()
+        except EOFError:
+            return default
+
+        if reply == "":
+            if filter_text and filtered_options:
+                return filtered_options[0]
+            return default
+
+        if reply.isdigit():
+            index = int(reply)
+            if 1 <= index <= len(filtered_options):
+                return filtered_options[index - 1]
+            if index == 0 and allow_custom:
                 try:
-                    val = input(f"  {colorize('Select', Colors.BOLD)}: ").strip()
+                    custom = input("  Custom value: ").strip()
                 except EOFError:
                     return default
-                if not val:
-                    if default:
-                        return default
-                    continue
-                if val == "0" and allow_custom:
-                    custom = input(f"  {colorize('Custom value', Colors.BOLD)}: ").strip()
-                    if custom:
-                        return custom
-                    continue
-                if val.isdigit():
-                    idx = int(val)
-                    if 1 <= idx <= len(options):
-                        return options[idx - 1]
-                # treat as custom if allowed
-                if allow_custom:
-                    return val
-                print_error("Invalid selection, try again.")
-            # not reached
-
-        while True:
-            check_shutdown()
-            # Clear screen area and redraw
-            print(f"\r{' ' * 80}\r", end="")  # Clear line
-            print_section(prompt, "Type to filter, select number, or Enter for default")
-
-            for i, opt in enumerate(filtered_options, 1):
-                marker = " ✓" if opt == default else ""
-                print(f"  {colorize(str(i), Colors.CYAN)}) {opt}{marker}")
-
-            if allow_custom:
-                print(f"  {colorize('0', Colors.GRAY)}) Custom entry...")
-            print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
-            if filter_text:
-                print(f"  {colorize('Filter', Colors.YELLOW)}: {filter_text}")
-
-            # Get single character input for type-ahead
-            import termios
-            import tty
-
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(fd)
-                ch = sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-            if ch == '\r' or ch == '\n':  # Enter
-                if filter_text:
-                    # If filtered list has items, select first
-                    if filtered_options:
-                        return filtered_options[0]
-                    else:
-                        # No matches, treat as custom
-                        if allow_custom:
-                            return filter_text
-                        else:
-                            filter_text = ""
-                            continue
-                else:
-                    return default
-            elif ch == '\x7f' or ch == '\b':  # Backspace
-                filter_text = filter_text[:-1]
-            elif ch == '\x03':  # Ctrl+C
-                raise KeyboardInterrupt
-            elif ch.isprintable():
-                filter_text += ch
-            else:
-                # Number selection
-                if ch.isdigit():
-                    idx = int(ch)
-                    if idx == 0 and allow_custom:
-                        custom = input(f"\n  {colorize('Custom value', Colors.BOLD)}: ").strip()
-                        if custom:
-                            return custom
-                        continue
-                    elif 1 <= idx <= len(filtered_options):
-                        return filtered_options[idx - 1]
+                if custom:
+                    return custom
                 continue
+            print_error("Invalid selection, try again.")
+            continue
 
-            # Update filtered list
-            if filter_text:
-                filter_lower = filter_text.lower()
-                filtered_options = [opt for opt in options if filter_lower in opt.lower()]
-            else:
-                filtered_options = options
+        exact_match = next(
+            (option for option in filtered_options if option.casefold() == reply.casefold()),
+            None,
+        )
+        if exact_match:
+            return exact_match
+
+        new_filter = reply
+        if not any(new_filter.casefold() in option.casefold() for option in options):
+            print_error("No matching options, try again.")
+            filter_text = ""
+            continue
+        filter_text = new_filter
+
+
+def _linux_timezone_zones() -> list[str]:
+    """Return standard IANA zones, with a static fallback for minimal systems."""
+    zones = set(LINUX_TIMEZONES)
+    try:
+        from zoneinfo import available_timezones
+        zones.update(available_timezones())
+    except (ImportError, OSError):
+        pass
+
+    # Exclude tzdb implementation aliases that are not user-facing zones.
+    return sorted(
+        zone for zone in zones
+        if zone not in {"Factory", "localtime"}
+        and not zone.startswith(("posix/", "right/", "SystemV/"))
+    )
 
 
 def _ask_timezone(prompt: str, default: str = "", os_type: str = "linux") -> str:
-    """Ask for a timezone, showing a selectable list."""
-    zones = LINUX_TIMEZONES if os_type == "linux" else WINDOWS_TIMEZONES
-    return _ask_from_list(prompt, default, zones)
+    """Ask for a timezone using region then full-zone selection."""
+    if os_type.lower() != "linux":
+        valid_default = default if default in WINDOWS_TIMEZONES else ""
+        return _ask_from_list(prompt, valid_default, WINDOWS_TIMEZONES, allow_custom=False)
 
+    zones = _linux_timezone_zones()
+    region_map = {}
+    for zone in zones:
+        if "/" in zone:
+            region, _ = zone.split("/", 1)
+            region_map.setdefault(region, []).append(zone)
+        else:
+            region_map.setdefault(zone, [zone])
+    region_map = {region: sorted(set(region_zones)) for region, region_zones in region_map.items()}
+
+    default_region = ""
+    default_zone = ""
+    if default in zones:
+        if "/" in default:
+            default_region, default_zone = default.split("/", 1)
+            default_zone = default
+        else:
+            default_region = default
+    else:
+        default_region = "UTC" if "UTC" in region_map else next(iter(sorted(region_map)), "")
+
+    regions = sorted(region_map)
+    region = _ask_from_list(
+        f"{prompt} (region)", default_region, regions, allow_custom=False
+    )
+    region_zones = region_map.get(region, [])
+    if not region_zones:
+        return default_region or "UTC"
+    if region_zones == [region]:
+        return region
+
+    zone = _ask_from_list(
+        f"{prompt} ({region})", default_zone, region_zones, allow_custom=False
+    )
+    return zone if zone in region_zones else region_zones[0]
 
 def _ask_locale(prompt: str, default: str = "") -> str:
     return _ask_from_list(prompt, default, LINUX_LOCALES)
