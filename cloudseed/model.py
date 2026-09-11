@@ -80,6 +80,15 @@ def _box_width() -> int:
         return 78
 
 
+def _term_width() -> int:
+    """Get terminal width, fallback to 80."""
+    import shutil
+    try:
+        return min(shutil.get_terminal_size().columns, 100)
+    except Exception:
+        return 80
+
+
 def _center_text(text: str, width: int) -> str:
     """Center text in given width."""
     visible_len = len(text)
@@ -138,55 +147,16 @@ def print_banner(title: str = "", platform: str = "", os_type: str = "", modules
     print()
 
 
-def print_frame(title: str, description: str = "", lines: list = None, footer: str = "", width: int = None) -> None:
-    """Print a framed section with title, optional description, content lines, and footer."""
-    if width is None:
-        width = _box_width() - 2
-    inner_w = width
-
-    print()
-    # Top border with title
-    title_display = f" {title} "
-    title_len = len(title_display)
-    if title_len > inner_w - 4:
-        title_display = title_display[:inner_w - 7] + "..."
-        title_len = len(title_display)
-    left_pad = (inner_w - title_len) // 2
-    right_pad = inner_w - title_len - left_pad
-    print(f"  {colorize(BOX['lt'] + BOX['lh'] * left_pad + title_display + BOX['lh'] * right_pad + BOX['rt'], Colors.BLUE)}")
-
-    if description:
-        print(f"  {colorize(BOX['lv'], Colors.BLUE)} {colorize(description.ljust(inner_w), Colors.GRAY)} {colorize(BOX['lv'], Colors.BLUE)}")
-        print(f"  {colorize(BOX['ll'] + BOX['lh'] * inner_w + BOX['rl'], Colors.BLUE)}")
-
-    if lines:
-        for line in lines:
-            prefix = ""
-            if line.startswith("▸ "):
-                prefix = colorize("▸ ", Colors.BOLD + Colors.GREEN)
-                line = line[2:]
-            elif line.startswith("☑ "):
-                prefix = colorize("☑ ", Colors.GREEN)
-                line = line[2:]
-            elif line.startswith("☐ "):
-                prefix = colorize("☐ ", Colors.GRAY)
-                line = line[2:]
-            elif line.startswith("  "):
-                prefix = "  "
-                line = line[2:]
-            print(f"  {colorize(BOX['lv'], Colors.BLUE)} {prefix}{line.ljust(inner_w - len(prefix))} {colorize(BOX['lv'], Colors.BLUE)}")
-
-    if footer:
-        print(f"  {colorize(BOX['ll'] + BOX['lh'] * inner_w + BOX['rl'], Colors.BLUE)}")
-        print(f"  {colorize(BOX['lv'], Colors.BLUE)} {colorize(footer.ljust(inner_w), Colors.GRAY)} {colorize(BOX['lv'], Colors.BLUE)}")
-
-    # Bottom border
-    print(f"  {colorize(BOX['lb'] + BOX['lh'] * inner_w + BOX['rb'], Colors.BLUE)}")
-
-
 def print_section(title: str, description: str = "") -> None:
-    """Print a simple section header (legacy, for compatibility)."""
-    print_frame(title, description)
+    """Print a simple section header without borders."""
+    width = _term_width()
+    inner_w = width
+    print()
+    print(f"  {colorize(title, Colors.BOLD + Colors.CYAN)}")
+    if description:
+        print(f"  {colorize(description, Colors.GRAY)}")
+    print(f"  {colorize('-' * inner_w, Colors.CYAN)}")
+    print()
 
 
 def print_info(msg: str) -> None:
@@ -856,7 +826,6 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
     check_shutdown()
     module_ids = [mid for (mid, lbl) in available]
     selected = set(defaults)
-    highlight = 0
 
     # Conflict pairs
     conflicts = {
@@ -880,43 +849,42 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
 
     while True:
         check_shutdown()
-        # Build framed module list
+        # Build module list
         lines = []
         for i, (mid, lbl) in enumerate(available, 1):
             is_selected = mid in selected
             has_conflict = conflicts.get(mid) in selected
             if is_selected:
-                prefix = "☑ "
+                prefix = "\u2611 "
                 if has_conflict:
                     lbl = f"{lbl}  {colorize('(conflict!)', Colors.RED)}"
             else:
-                prefix = "☐ "
+                prefix = "\u2610 "
                 if has_conflict:
                     lbl = f"{lbl}  {colorize('(conflict!)', Colors.YELLOW)}"
-            highlight_marker = ">" if i == highlight + 1 else " "
-            lines.append(f"{highlight_marker}{prefix}{lbl}")
+            lines.append(f"{prefix}{lbl}")
 
-        footer = "[Space] Toggle >  [number] Toggle  [c] Configure selected  [a] All  [n] None  [Enter] Confirm  [Esc] Back"
         platform_label = {"vsphere": "vSphere", "kvm": "KVM", "physical": "Physical"}.get(platform, platform.title() if platform else "Not selected")
         os_label = {"linux": "Linux", "windows": "Windows"}.get(os_type, os_type.capitalize() if os_type else "Not selected")
-        print_frame("MODULE SELECTION", f"Target: {platform_label} / {os_label}  [{len(selected)}/{len(available)} modules selected]", lines, footer)
 
-        key = _read_key(f"  {colorize('Selection', Colors.BOLD)}: ")
-        sel = key.strip().lower()
-        if key in ("\r", "\n"):
+        print_section("MODULE SELECTION", f"Target: {platform_label} / {os_label}  [{len(selected)}/{len(available)} modules selected]")
+        for i, line in enumerate(lines, 1):
+            print(f"  {colorize(str(i), Colors.CYAN)}) {line}")
+
+        footer = "[Space] toggle [#] toggle [c] config [a] all [n] none [Enter] OK [0/Esc] back"
+        print(f"  {colorize(footer, Colors.GRAY)}")
+
+        try:
+            sel = input(f"  {colorize('Selection', Colors.BOLD)}: ").strip().lower()
+        except EOFError:
+            return "BACK"
+
+        if sel == "":
             if not selected:
                 print_warn("No modules selected. Select at least one module.")
                 continue
             return list(selected)
-        if key == " ":
-            if module_ids:
-                toggle_module(module_ids[highlight])
-            else:
-                print_warn("No modules available.")
-            continue
-        if not sel:
-            continue
-        if sel == "0" or sel == "\x1b" or sel == "esc":
+        if sel == "0" or sel == "esc":
             return "BACK"
         if sel == "a":
             selected = set(module_ids)
@@ -933,7 +901,6 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
         if sel.isdigit():
             idx = int(sel)
             if 1 <= idx <= len(module_ids):
-                highlight = idx - 1
                 toggle_module(module_ids[idx - 1])
             continue
         print_error("Invalid selection, try again.")

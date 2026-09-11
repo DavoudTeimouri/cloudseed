@@ -44,7 +44,7 @@ Shows: Generate Configuration | Toolbox (External Tools) | Config Validator | Cl
 **Generate Configuration** (interactive menu):
 1. Pick target platform: **vSphere (VMware)**, **KVM (libvirt)**, or **Physical / Other**
 2. Pick OS: **Linux** or **Windows**
-3. **Multi-select modules** — toggle modules on/off by number or press `Space` to toggle highlighted module (green ✓ = selected), press `c` to configure selected, `a`=all, `n`=none, `0`=back
+3. **Multi-select modules** — toggle modules by number + `Enter` to confirm (green ✓ = selected), press `c` to configure selected, `a`=all, `n`=none, `0`=back
 4. For each selected module, configure sub-items one-by-one (press Enter for defaults)
 5. Choose output directory
 6. Files generated + apply instructions printed (see GUIDE.md)
