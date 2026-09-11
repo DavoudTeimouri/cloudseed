@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag release (e.g., v0.2.1)'
+        description: 'Tag release (e.g., v2.1.0)'
         required: true
-        default: 'v0.2.1'
+        default: 'v2.1.0'
 
 permissions:
   contents: write
@@ -21,9 +21,9 @@ jobs:
       release_tag: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install PyInstaller
@@ -42,10 +42,11 @@ jobs:
         id: changelog
         run: |
           TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
-          ESCAPED_TAG=$(echo "$TAG_NAME" | sed 's/\./\\./g')
-          CHANGELOG=$(awk -v tag="$ESCAPED_TAG" '
-            $0 ~ "^## \\[" tag "\\]" { found=1; next }
-            found && /^## \[/ { exit }
+          VERSION=${TAG_NAME#v}
+          ESCAPED_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
+          CHANGELOG=$(awk -v ver="\\\\[$ESCAPED_VERSION\\\\]" '
+            $0 ~ "^## " ver { found=1; next }
+            found && /^## \\[/ { exit }
             found { print }
           ' CHANGELOG.md)
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
@@ -61,16 +62,15 @@ jobs:
           draft: false
           prerelease: false
           files: ${{ steps.zip.outputs.zip_path }}
-          file_name: ${{ steps.zip.outputs.asset_name }}
 
   build-windows:
     runs-on: windows-latest
     needs: build-linux
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install PyInstaller
@@ -91,6 +91,5 @@ jobs:
         with:
           tag_name: ${{ needs.build-linux.outputs.release_tag }}
           files: ${{ steps.zip.outputs.zip_path }}
-          file_name: ${{ steps.zip.outputs.asset_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
