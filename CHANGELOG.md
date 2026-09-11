@@ -23,24 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Regression tests: numbered toggle + Enter, multi-digit modules, conflict indicator, EOF handling (tests/test_ui.py).
 - Timezone selector tests: hierarchical IANA selection, non-TTY fallback (tests/test_timezone_selector.py).
 
-## [2.0.6] - 2026-09-11
-
-### Changed
-- Module selector now uses numbered input + Enter confirmation (line-input fallback); supports multi-digit module numbers (10+).
-- Empty input (Enter) confirms selection; `0`/`Esc` returns to previous menu; `a`=all, `n`=none, `c`=configure selected.
-- Conflict indicator `(conflict!)` shown inline for mutually-exclusive module pairs.
-- Footer updated to 77 chars: `[Space] toggle [#] toggle [c] config [a] all [n] none [Enter] OK [0/Esc] back`.
-- Banner: borderless, explicit "CloudSeed" name, only module count shown (no host Platform/OS).
-
-### Fixed
-- Module selector no longer crashes on EOF (non-TTY stdin) — returns `BACK`.
-- Removed misleading `Platform: Vsphere  OS: Linux` from main banner.
-- Space key hint preserved in footer but toggles via numbered input; Enter confirms.
-
-### Testing
-- Added regression tests: numbered toggle + Enter, multi-digit modules, conflict indicator, EOF handling (tests/test_ui.py).
-- All 41 tests pass.
-
 ## [2.0.5] - 2026-09-10
 
 ### Changed
