@@ -586,7 +586,7 @@ The module selection screen now shows **all available modules** with real-time t
   Module Selection (Linux / vSphere)
 ============================================================
 
-Available modules (toggle by number, 'c' to configure selected, 'a'=all, 'n'=none):
+Available modules (toggle by number or `Space` for highlighted module, `c` to configure selected, `a`=all, `n`=none):
 
   [ ] 1) hostname              - Set hostname via cloud-init
   [✓] 2) platform_hostname    - Let platform set VM hostname
@@ -607,7 +607,7 @@ Available modules (toggle by number, 'c' to configure selected, 'a'=all, 'n'=non
   [ ] 17) vsphere_spec        - vSphere Customization Spec (XML)
   [ ] 18) vsphere_scripts     - vSphere Pre/Post Scripts
 
-Commands: [number] toggle | c=configure | a=all | n=none | 0=back
+Commands: [number] toggle | Space=toggle highlighted | c=configure | a=all | n=none | 0=back
 ```
 
 **Key behaviors:**

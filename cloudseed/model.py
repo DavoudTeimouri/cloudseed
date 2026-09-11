@@ -88,19 +88,19 @@ def _center_text(text: str, width: int) -> str:
 
 
 def print_banner(title: str = "", platform: str = "", os_type: str = "", modules_count: int = 0) -> None:
-    """Print CloudSeed modern box banner with ASCII logo and status bar."""
+    """Print CloudSeed banner; target values remain explicit in module menus."""
     from . import __version__
     width = _box_width() - 2  # Account for side borders
     inner_w = width
 
     # ASCII Logo
     logo = [
-        "██████╗ ███████╗████████╗███████╗██████╗  ██████╗ ██████╗ ███████╗",
-        "██╔══██╗██╔════╝╚══██╔══╝██╔════╝██╔══██╗██╔═══██╗██╔══██╗██╔════╝",
-        "██████╔╝█████╗     ██║   █████╗  ██████╔╝██║   ██║██████╔╝█████╗  ",
-        "██╔══██╗██╔══╝     ██║   ██╔══╝  ██╔══██╗██║   ██║██╔══██╗██╔══╝  ",
-        "██████╔╝███████╗   ██║   ███████╗██║  ██║╚██████╔╝██║  ██║███████╗",
-        "╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝",
+        "   _____ _                 _ _____              _ ",
+        "  / ____| |               | / ____|            | |",
+        " | |    | | ___  _   _  __| | (___   ___  ___  __| |",
+        " | |    | |/ _ \\| | | |/ _` |\\___ \\ / _ \\/ _ \\/ _` |",
+        " | |____| | (_) | |_| | (_| |____) |  __/  __/ (_| |",
+        "  \\_____|_|\\___/ \\__,_|\\__,_|_____/ \\___|\\___|\\__,_|",
     ]
 
     print()  # Top spacing
@@ -115,7 +115,7 @@ def print_banner(title: str = "", platform: str = "", os_type: str = "", modules
     print(f"  {colorize(BOX['v'], Colors.CYAN)} {' ' * inner_w} {colorize(BOX['v'], Colors.CYAN)}")
 
     # Tagline
-    tagline = f"cloud-init / Cloudbase-Init VM Template Generator  v{__version__}"
+    tagline = f"CloudSeed | cloud-init / Cloudbase-Init VM Template Generator  v{__version__}"
     print(f"  {colorize(BOX['v'], Colors.CYAN)} {_center_text(tagline, inner_w)} {colorize(BOX['v'], Colors.CYAN)}")
 
     platforms = "vSphere  •  KVM  •  Physical  •  Zero deps (stdlib)"
@@ -125,15 +125,8 @@ def print_banner(title: str = "", platform: str = "", os_type: str = "", modules
     print(f"  {colorize(BOX['l'] + BOX['h'] * inner_w + BOX['r'], Colors.CYAN)}")
 
     # Status bar
-    if platform or os_type or modules_count:
-        status_parts = []
-        if platform:
-            status_parts.append(f"Platform: {platform.capitalize()}")
-        if os_type:
-            status_parts.append(f"OS: {os_type.capitalize()}")
-        if modules_count:
-            status_parts.append(f"Modules: {modules_count} selected")
-        status = "  ".join(status_parts)
+    if modules_count:
+        status = f"Modules: {modules_count} selected"
         print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(status.ljust(inner_w), Colors.BOLD + Colors.WHITE)} {colorize(BOX['v'], Colors.CYAN)}")
     elif title:
         print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(title.center(inner_w), Colors.BOLD + Colors.WHITE)} {colorize(BOX['v'], Colors.CYAN)}")
@@ -310,6 +303,28 @@ class TemplateConfig:
 
 
 # --- interactive prompt helpers -------------------------------------------
+
+def _read_key(prompt: str) -> str:
+    """Read one key in a TTY, with portable line-input fallback."""
+    print(prompt, end="", flush=True)
+    try:
+        if sys.stdin.isatty():
+            import termios, tty
+            fd = sys.stdin.fileno()
+            old = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                return sys.stdin.read(1)
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        import msvcrt
+        return msvcrt.getwch()
+    except (ImportError, OSError):
+        try:
+            return input()
+        except EOFError:
+            return ""
+
 
 def _ask(prompt: str, default: str = "") -> str:
     check_shutdown()
@@ -840,8 +855,8 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
     """
     check_shutdown()
     module_ids = [mid for (mid, lbl) in available]
-    module_labels = [lbl for (mid, lbl) in available]
     selected = set(defaults)
+    highlight = 0
 
     # Conflict pairs
     conflicts = {
@@ -852,6 +867,16 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
         "network": "platform_network",
         "ntp": "platform_ntp",
     }
+
+    def toggle_module(mid: str) -> None:
+        if mid in selected:
+            selected.remove(mid)
+            return
+        selected.add(mid)
+        disabled = conflicts.get(mid)
+        if disabled in selected:
+            selected.remove(disabled)
+            print_info(f"{mid} selected -> {disabled} auto-disabled")
 
     while True:
         check_shutdown()
@@ -868,15 +893,30 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
                 prefix = "☐ "
                 if has_conflict:
                     lbl = f"{lbl}  {colorize('(conflict!)', Colors.YELLOW)}"
-            lines.append(f"{prefix}{lbl}")
+            highlight_marker = ">" if i == highlight + 1 else " "
+            lines.append(f"{highlight_marker}{prefix}{lbl}")
 
-        footer = "[Space] Toggle  [c] Configure selected  [a] All  [n] None  [Enter] Confirm  [Esc] Back"
-        print_frame("MODULE SELECTION", f"Platform: {platform}  OS: {os_type}  [{len(selected)}/{len(available)} modules selected]", lines, footer)
+        footer = "[Space] Toggle >  [number] Toggle  [c] Configure selected  [a] All  [n] None  [Enter] Confirm  [Esc] Back"
+        platform_label = {"vsphere": "vSphere", "kvm": "KVM", "physical": "Physical"}.get(platform, platform.title() if platform else "Not selected")
+        os_label = {"linux": "Linux", "windows": "Windows"}.get(os_type, os_type.capitalize() if os_type else "Not selected")
+        print_frame("MODULE SELECTION", f"Target: {platform_label} / {os_label}  [{len(selected)}/{len(available)} modules selected]", lines, footer)
 
-        sel = input(f"  {colorize('Selection', Colors.BOLD)}: ").strip().lower()
+        key = _read_key(f"  {colorize('Selection', Colors.BOLD)}: ")
+        sel = key.strip().lower()
+        if key in ("\r", "\n"):
+            if not selected:
+                print_warn("No modules selected. Select at least one module.")
+                continue
+            return list(selected)
+        if key == " ":
+            if module_ids:
+                toggle_module(module_ids[highlight])
+            else:
+                print_warn("No modules available.")
+            continue
         if not sel:
             continue
-        if sel == "0" or sel == "esc":
+        if sel == "0" or sel == "\x1b" or sel == "esc":
             return "BACK"
         if sel == "a":
             selected = set(module_ids)
@@ -890,36 +930,13 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
                 continue
             return list(selected)
 
-        try:
-            idxs = [int(x) for x in sel.split() if x.isdigit()]
-            for idx in idxs:
-                if 1 <= idx <= len(module_ids):
-                    mid = module_ids[idx - 1]
-                    if mid in selected:
-                        selected.remove(mid)
-                    else:
-                        selected.add(mid)
-                        # Handle platform module priority: auto-disable cloud-init equivalent
-                        if mid == "platform_hostname" and "hostname" in selected:
-                            selected.remove("hostname")
-                            print_info("Platform Hostname selected -> Hostname module auto-disabled (platform has priority)")
-                        elif mid == "platform_network" and "network" in selected:
-                            selected.remove("network")
-                            print_info("Platform Network selected -> Network module auto-disabled (platform has priority)")
-                        elif mid == "platform_ntp" and "ntp" in selected:
-                            selected.remove("ntp")
-                            print_info("Platform NTP selected -> NTP module auto-disabled (platform has priority)")
-                        elif mid == "hostname" and "platform_hostname" in selected:
-                            selected.remove("platform_hostname")
-                            print_info("Hostname selected -> Platform Hostname auto-disabled")
-                        elif mid == "network" and "platform_network" in selected:
-                            selected.remove("platform_network")
-                            print_info("Network selected -> Platform Network auto-disabled")
-                        elif mid == "ntp" and "platform_ntp" in selected:
-                            selected.remove("platform_ntp")
-                            print_info("NTP selected -> Platform NTP auto-disabled")
-        except (ValueError, IndexError):
-            print_error("Invalid selection, try again.")
+        if sel.isdigit():
+            idx = int(sel)
+            if 1 <= idx <= len(module_ids):
+                highlight = idx - 1
+                toggle_module(module_ids[idx - 1])
+            continue
+        print_error("Invalid selection, try again.")
 
 
 def collect_interactive() -> TemplateConfig:
@@ -935,7 +952,7 @@ def collect_interactive() -> TemplateConfig:
     cfg = TemplateConfig()
 
     while True:  # Main loop - allows returning to main menu
-        print_banner("Main Menu", cfg.platform, cfg.os_type, len(cfg.modules))
+        print_banner("Main Menu", modules_count=len(cfg.modules))
 
         # Main action menu
         main_actions = [

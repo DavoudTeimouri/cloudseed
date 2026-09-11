@@ -5,6 +5,41 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - 2026-09-10
+
+### Changed
+- Main banner now names **CloudSeed** explicitly and shows only selected-module count.
+- Module selection frame labels platform and OS as target values, not current host values.
+- Module selector supports Space to toggle highlighted module; numbered input still toggles directly.
+
+### Fixed
+- Removed misleading `Platform: Vsphere  OS: Linux` status from main banner.
+- Space key now performs a module toggle instead of being treated as filter text.
+
+### Testing
+- 38 tests pass.
+
+## [2.0.4] - 2026-09-10
+
+### Added
+- Portable line-input selector (`_ask_from_list`): replaces termios/tty raw input with line-based selection that works in all terminals (SSH, Docker, non-TTY, piped stdin).
+- Linux timezone: hierarchical region→zone selection from full IANA database (~600 zones) with static fallback for minimal systems.
+- Windows timezone: flat list from WINDOWS_TIMEZONES (no custom entry).
+- Added Asia/Tehran to static LINUX_TIMEZONES fallback list.
+- New test file: tests/test_timezone_selector.py (11 tests, all passing).
+
+### Changed
+- Removed duplicate welcome banner from run_interactive().
+- Version bumped to 2.0.4 across all surfaces (pyproject.toml, __init__.py, version.txt, Homebrew formula, Chocolatey nuspec/installer).
+
+### Fixed
+- Timezone selector now works correctly in non-TTY environments (CI, Docker, SSH without TTY).
+- Region selection correctly passes default region; zone selection uses full zone ID as default.
+
+### Testing
+- All 36 tests pass.
+- Single-file binary builds successfully (PyInstaller).
+
 ## [2.0.3] - 2026-09-05
 
 ### Added
