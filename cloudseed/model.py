@@ -871,7 +871,7 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
         for i, line in enumerate(lines, 1):
             print(f"  {colorize(str(i), Colors.CYAN)}) {line}")
 
-        footer = "[Space] toggle [#] toggle [c] config [a] all [n] none [Enter] OK [0/Esc] back"
+        footer = "[#] toggle [c] config [a] all [n] none [Enter] OK [0/Esc] back"
         print(f"  {colorize(footer, Colors.GRAY)}")
 
         try:

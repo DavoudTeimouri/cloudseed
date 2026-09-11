@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Borderless banner**: Removed box-drawing borders from `print_banner()` and all menus; clean aligned text only.
 - **Numbered module selection**: Reverted to v2.0.4-style line-input selector — toggle by number + Enter to confirm, supports multi-digit module numbers (10+). Empty input (Enter) confirms; `0`/`Esc` returns to previous menu.
 - **Complete IANA TZDB timezone list**: Linux timezone selector now uses `zoneinfo.available_timezones()` (~480 zones) with hierarchical region→zone selection. Static fallback for minimal systems retained.
-- Footer updated: `[Space] toggle [#] toggle [c] config [a] all [n] none [Enter] OK [0/Esc] back`.
+- **Footer**: Removed `[Space] toggle` (Space key not supported in line-input mode); shows `[#] toggle [c] config [a] all [n] none [Enter] OK [0/Esc] back`.
 
 ### Fixed
 - **`[Esc] Back` navigation**: ESC sequence now handled in line-input mode; returns `BACK` sentinel from module selector.
@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Regression tests: numbered toggle + Enter, multi-digit modules, conflict indicator, EOF handling (tests/test_ui.py).
 - Timezone selector tests: hierarchical IANA selection, non-TTY fallback (tests/test_timezone_selector.py).
 
-## [2.0.5] - 2026-09-10
+## [2.1.0] - 2026-09-11
 
 ### Changed
 - Main banner now names **CloudSeed** explicitly and shows only selected-module count.
