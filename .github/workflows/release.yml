@@ -44,9 +44,9 @@ jobs:
           TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION=${TAG_NAME#v}
           ESCAPED_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
-          CHANGELOG=$(awk -v ver="\\\\[$ESCAPED_VERSION\\\\]" '
+          CHANGELOG=$(awk -v ver="\[${ESCAPED_VERSION}\]" '
             $0 ~ "^## " ver { found=1; next }
-            found && /^## \\[/ { exit }
+            found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md)
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
