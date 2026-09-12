@@ -5,6 +5,18 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] - 2026-09-12
+
+### Added
+- **Windows hierarchical timezone selection**: Windows now uses the same region→timezone pattern as Linux. Full 92 Windows time zones organized into 14 regions (Europe, Africa, Asia, Australia, Pacific, Americas, etc.) with pagination (20 per page), type-ahead filter, exact match, and numeric selection.
+
+### Changed
+- `WINDOWS_TIMEZONES` expanded from 22 to 92 zones (complete Microsoft list).
+- Windows timezone selector now matches Linux UX: region list → zone sub-menu with pagination.
+
+### Testing
+- All 41 tests pass.
+
 ## [2.1.2] - 2026-09-12
 
 ### Fixed

@@ -968,31 +968,223 @@ LINUX_TIMEZONES = [
     "Pacific/Yap",
 ]
 
-# Common timezones for Windows (Windows time zone IDs)
+# Windows time zones (Windows time zone IDs) — full list with hierarchical regions
 WINDOWS_TIMEZONES = [
     "UTC",
     "GMT Standard Time",
+    "Greenwich Standard Time",
     "W. Europe Standard Time",
     "Central Europe Standard Time",
     "Romance Standard Time",
+    "Central European Standard Time",
+    "W. Central Africa Standard Time",
+    "Jordan Standard Time",
+    "GTB Standard Time",
+    "Middle East Standard Time",
+    "Egypt Standard Time",
+    "Syria Standard Time",
+    "E. Europe Standard Time",
+    "South Africa Standard Time",
+    "FLE Standard Time",
+    "Turkey Standard Time",
+    "Israel Standard Time",
+    "Arabic Standard Time",
+    "Arab Standard Time",
     "Russian Standard Time",
-    "Eastern Standard Time",
-    "Central Standard Time",
-    "Mountain Standard Time",
-    "Pacific Standard Time",
-    "Eastern Standard Time (Mexico)",
-    "Canada Central Standard Time",
-    "Pacific Standard Time (Mexico)",
-    "Tokyo Standard Time",
-    "China Standard Time",
-    "Singapore Standard Time",
+    "E. Africa Standard Time",
+    "Iran Standard Time",
     "Arabian Standard Time",
+    "Azerbaijan Standard Time",
+    "Mauritius Standard Time",
+    "Georgian Standard Time",
+    "Caucasus Standard Time",
+    "Afghanistan Standard Time",
+    "West Asia Standard Time",
+    "Ekaterinburg Standard Time",
+    "Pakistan Standard Time",
     "India Standard Time",
-    "AUS Eastern Standard Time",
-    "AUS Central Standard Time",
+    "Sri Lanka Standard Time",
+    "Nepal Standard Time",
+    "Central Asia Standard Time",
+    "Bangladesh Standard Time",
+    "N. Central Asia Standard Time",
+    "Myanmar Standard Time",
+    "SE Asia Standard Time",
+    "North Asia Standard Time",
+    "China Standard Time",
+    "North Asia East Standard Time",
+    "Singapore Standard Time",
     "W. Australia Standard Time",
+    "Taipei Standard Time",
+    "Ulaanbaatar Standard Time",
+    "Tokyo Standard Time",
+    "Korea Standard Time",
+    "Yakutsk Standard Time",
+    "Cen. Australia Standard Time",
+    "AUS Central Standard Time",
+    "E. Australia Standard Time",
+    "AUS Eastern Standard Time",
+    "Tasmania Standard Time",
+    "Vladivostok Standard Time",
+    "West Pacific Standard Time",
+    "Central Pacific Standard Time",
     "New Zealand Standard Time",
+    "UTC+12",
+    "Fiji Standard Time",
+    "Kamchatka Standard Time",
+    "Tonga Standard Time",
+    "Samoa Standard Time",
+    "Line Islands Standard Time",
+    "Hawaiian Standard Time",
+    "Alaskan Standard Time",
+    "Pacific Standard Time",
+    "Pacific Standard Time (Mexico)",
+    "Mountain Standard Time",
+    "Mountain Standard Time (Mexico)",
+    "Canada Central Standard Time",
+    "US Mountain Standard Time",
+    "Mexico Standard Time",
+    "Central Standard Time",
+    "Central Standard Time (Mexico)",
+    "Central America Standard Time",
+    "Eastern Standard Time",
+    "US Eastern Standard Time",
+    "Eastern Standard Time (Mexico)",
+    "Venezuela Standard Time",
+    "SA Western Standard Time",
+    "SA Pacific Standard Time",
+    "SA Eastern Standard Time",
+    "Newfoundland Standard Time",
+    "Argentina Standard Time",
+    "Montevideo Standard Time",
+    "Greenland Standard Time",
+    "Mid-Atlantic Standard Time",
+    "Azores Standard Time",
+    "Cape Verde Standard Time",
+    "Morocco Standard Time",
 ]
+
+
+# Windows timezone region map for hierarchical selection
+WINDOWS_TIMEZONE_REGIONS = {
+    "UTC": ["UTC"],
+    "Europe": [
+        "GMT Standard Time",
+        "Greenwich Standard Time",
+        "W. Europe Standard Time",
+        "Central Europe Standard Time",
+        "Romance Standard Time",
+        "Central European Standard Time",
+        "E. Europe Standard Time",
+        "FLE Standard Time",
+        "GTB Standard Time",
+        "Russian Standard Time",
+        "Turkey Standard Time",
+    ],
+    "Africa": [
+        "Morocco Standard Time",
+        "W. Central Africa Standard Time",
+        "E. Africa Standard Time",
+        "South Africa Standard Time",
+        "Mauritius Standard Time",
+    ],
+    "Atlantic": [
+        "Azores Standard Time",
+        "Cape Verde Standard Time",
+    ],
+    "Middle East": [
+        "Middle East Standard Time",
+        "Egypt Standard Time",
+        "Syria Standard Time",
+        "Jordan Standard Time",
+        "Israel Standard Time",
+        "Arabic Standard Time",
+        "Arab Standard Time",
+    ],
+    "Asia": [
+        "Afghanistan Standard Time",
+        "Arabian Standard Time",
+        "Azerbaijan Standard Time",
+        "Bangladesh Standard Time",
+        "Central Asia Standard Time",
+        "China Standard Time",
+        "Ekaterinburg Standard Time",
+        "Georgian Standard Time",
+        "India Standard Time",
+        "Iran Standard Time",
+        "Korea Standard Time",
+        "Myanmar Standard Time",
+        "N. Central Asia Standard Time",
+        "Nepal Standard Time",
+        "North Asia East Standard Time",
+        "North Asia Standard Time",
+        "Pakistan Standard Time",
+        "SE Asia Standard Time",
+        "Singapore Standard Time",
+        "Sri Lanka Standard Time",
+        "Taipei Standard Time",
+        "Tokyo Standard Time",
+        "Ulaanbaatar Standard Time",
+        "Vladivostok Standard Time",
+        "West Asia Standard Time",
+        "Yakutsk Standard Time",
+    ],
+    "Australia": [
+        "AUS Central Standard Time",
+        "AUS Eastern Standard Time",
+        "Cen. Australia Standard Time",
+        "E. Australia Standard Time",
+        "Tasmania Standard Time",
+        "W. Australia Standard Time",
+    ],
+    "Pacific": [
+        "Alaskan Standard Time",
+        "Central Pacific Standard Time",
+        "Fiji Standard Time",
+        "Hawaiian Standard Time",
+        "Kamchatka Standard Time",
+        "Line Islands Standard Time",
+        "New Zealand Standard Time",
+        "Samoa Standard Time",
+        "Tonga Standard Time",
+        "UTC+12",
+        "West Pacific Standard Time",
+    ],
+    "Pacific (America)": [
+        "Pacific Standard Time",
+        "Pacific Standard Time (Mexico)",
+        "SA Pacific Standard Time",
+    ],
+    "Mountain (America)": [
+        "Canada Central Standard Time",
+        "Mexico Standard Time",
+        "Mountain Standard Time",
+        "Mountain Standard Time (Mexico)",
+        "US Mountain Standard Time",
+    ],
+    "Central (America)": [
+        "Central Standard Time",
+        "Central Standard Time (Mexico)",
+    ],
+    "Central America": [
+        "Central America Standard Time",
+    ],
+    "Eastern (America)": [
+        "Eastern Standard Time",
+        "Eastern Standard Time (Mexico)",
+        "US Eastern Standard Time",
+    ],
+    "South America": [
+        "Argentina Standard Time",
+        "Greenland Standard Time",
+        "Mid-Atlantic Standard Time",
+        "Montevideo Standard Time",
+        "Newfoundland Standard Time",
+        "SA Eastern Standard Time",
+        "SA Western Standard Time",
+        "Venezuela Standard Time",
+    ],
+}
 
 # Common locales (Linux)
 LINUX_LOCALES = [
@@ -1236,8 +1428,36 @@ def _linux_timezone_zones() -> list[str]:
 def _ask_timezone(prompt: str, default: str = "", os_type: str = "linux") -> str:
     """Ask for a timezone using region then full-zone selection."""
     if os_type.lower() != "linux":
-        valid_default = default if default in WINDOWS_TIMEZONES else ""
-        return _ask_from_list(prompt, valid_default, WINDOWS_TIMEZONES, allow_custom=False)
+        # Windows: hierarchical region -> timezone selection
+        region_map = WINDOWS_TIMEZONE_REGIONS
+
+        default_region = ""
+        default_zone = ""
+        if default in WINDOWS_TIMEZONES:
+            # Find which region contains the default
+            for region, zones in region_map.items():
+                if default in zones:
+                    default_region = region
+                    default_zone = default
+                    break
+
+        if not default_region:
+            default_region = "UTC" if "UTC" in region_map else next(iter(sorted(region_map)), "")
+
+        regions = sorted(region_map)
+        region = _ask_from_list(
+            f"{prompt} (region)", default_region, regions, allow_custom=False
+        )
+        region_zones = region_map.get(region, [])
+        if not region_zones:
+            return default_region or "UTC"
+        if len(region_zones) == 1 and region_zones[0] == region:
+            return region
+
+        zone = _ask_from_list(
+            f"{prompt} ({region})", default_zone, region_zones, allow_custom=False
+        )
+        return zone if zone in region_zones else region_zones[0]
 
     zones = _linux_timezone_zones()
     region_map = {}
