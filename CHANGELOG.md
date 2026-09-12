@@ -5,6 +5,20 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-09-12
+
+### Added
+- **Full paginated IANA timezone list**: Each region now shows complete sub-menu of all IANA zones (~480 zones total) with pagination (20 per page). Navigation via `n`/`p` for next/prev page, type-ahead filter, exact match, or numeric selection.
+
+### Changed
+- Timezone selector: hierarchical region→zone flow preserved; zone step now displays full region list with page navigation instead of truncated list.
+
+### Fixed
+- Timezone sub-menu no longer shows limited subset; full IANA database available per region.
+
+### Testing
+- All 41 tests pass.
+
 ## [2.1.0] - 2026-09-11
 
 ### Changed

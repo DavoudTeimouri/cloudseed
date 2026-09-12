@@ -647,7 +647,7 @@ WINDOWS_LOCALES = [
 
 
 def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool = True) -> str:
-    """Select from a numbered list using line input.
+    """Select from a numbered list using line input with pagination.
 
     Line input keeps Backspace and terminal editing portable. It also works in
     non-TTY environments, where raw ``termios`` input crashes.
@@ -657,7 +657,11 @@ def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool 
     if not options:
         return default
 
+    # Pagination settings
+    PAGE_SIZE = 20
+
     filter_text = ""
+    page_offset = 0
     while True:
         check_shutdown()
         filtered_options = [
@@ -665,8 +669,17 @@ def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool 
             if not filter_text or filter_text.casefold() in option.casefold()
         ]
 
+        # Reset page if filter changed or page is out of bounds
+        if page_offset >= len(filtered_options):
+            page_offset = max(0, len(filtered_options) - PAGE_SIZE)
+            page_offset = (page_offset // PAGE_SIZE) * PAGE_SIZE
+
+        page = filtered_options[page_offset:page_offset + PAGE_SIZE]
+        total_pages = max(1, (len(filtered_options) + PAGE_SIZE - 1) // PAGE_SIZE)
+        current_page = (page_offset // PAGE_SIZE) + 1
+
         print_section(prompt, "Type filter, select number, or Enter for default")
-        for i, option in enumerate(filtered_options, 1):
+        for i, option in enumerate(page, page_offset + 1):
             marker = " ✓" if option == default else ""
             print(f"  {colorize(str(i), Colors.CYAN)}) {option}{marker}")
 
@@ -675,9 +688,16 @@ def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool 
         print(f"  {colorize('Enter', Colors.GRAY)}) Keep default [{default}]")
         if filter_text:
             print(f"  {colorize('Filter', Colors.YELLOW)}: {filter_text}")
+        if total_pages > 1:
+            nav = f"  Page {current_page}/{total_pages} "
+            if current_page < total_pages:
+                nav += f"({colorize('n', Colors.CYAN)})ext "
+            if current_page > 1:
+                nav += f"({colorize('p', Colors.CYAN)})rev "
+            print(f"{nav}({colorize('Enter', Colors.GRAY)})select")
 
         try:
-            reply = input("  Selection: ").strip()
+            reply = input("  Selection: ").strip().lower()
         except EOFError:
             return default
 
@@ -685,6 +705,22 @@ def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool 
             if filter_text and filtered_options:
                 return filtered_options[0]
             return default
+
+        if reply == "0" and allow_custom:
+            try:
+                custom = input("  Custom value: ").strip()
+            except EOFError:
+                return default
+            if custom:
+                return custom
+            continue
+
+        if reply == "n" and current_page < total_pages:
+            page_offset += PAGE_SIZE
+            continue
+        if reply == "p" and current_page > 1:
+            page_offset -= PAGE_SIZE
+            continue
 
         if reply.isdigit():
             index = int(reply)
@@ -712,8 +748,10 @@ def _ask_from_list(prompt: str, default: str, options: list, allow_custom: bool 
         if not any(new_filter.casefold() in option.casefold() for option in options):
             print_error("No matching options, try again.")
             filter_text = ""
+            page_offset = 0
             continue
         filter_text = new_filter
+        page_offset = 0
 
 
 def _linux_timezone_zones() -> list[str]:
