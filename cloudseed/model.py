@@ -1879,8 +1879,12 @@ def _configure_packages(cfg: TemplateConfig) -> bool:
 
 def _configure_locale(cfg: TemplateConfig) -> bool:
     print_section("Locale & Timezone", "Set timezone, locale, and keyboard layout")
-    cfg.timezone = _ask_timezone("Timezone", cfg.timezone, os_type="linux")
-    cfg.locale = _ask_locale("Locale", cfg.locale)
+    if cfg.os_type == "windows":
+        cfg.timezone = _ask_timezone("Timezone", cfg.timezone, os_type="windows")
+        cfg.locale = _ask_windows_locale("Locale (UI)", cfg.locale)
+    else:
+        cfg.timezone = _ask_timezone("Timezone", cfg.timezone, os_type="linux")
+        cfg.locale = _ask_locale("Locale", cfg.locale)
     cfg.keyboard_layout = _ask_keyboard_layout("Keyboard layout", cfg.keyboard_layout)
     return True
 

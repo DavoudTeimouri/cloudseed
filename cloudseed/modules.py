@@ -12,7 +12,7 @@ MODULES = [
     ("root", "Harden Root (Disable Root Login)", ["linux"]),
     ("network", "Network (DHCP / Static, DNS)", ["linux", "windows"]),
     ("packages", "Install OS Packages / Upgrade", ["linux"]),
-    ("locale", "Locale + Keyboard + Timezone", ["linux"]),
+    ("locale", "Locale + Keyboard + Timezone", ["linux", "windows"]),
     ("disk", "Grow Root Filesystem / LVM", ["linux"]),
     ("ntp", "NTP Time Servers", ["linux", "windows"]),
     ("files", "Write Arbitrary Files", ["linux", "windows"]),
