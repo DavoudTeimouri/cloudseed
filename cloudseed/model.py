@@ -99,8 +99,8 @@ def _center_text(text: str, width: int) -> str:
 def print_banner(title: str = "", platform: str = "", os_type: str = "", modules_count: int = 0) -> None:
     """Print CloudSeed banner; target values remain explicit in module menus."""
     from . import __version__
-    width = _box_width() - 2  # Account for side borders
-    inner_w = width
+    width = _term_width()
+    inner_w = width - 4
 
     # ASCII Logo
     logo = [
@@ -114,36 +114,36 @@ def print_banner(title: str = "", platform: str = "", os_type: str = "", modules
 
     print()  # Top spacing
     # Top border
-    print(f"  {colorize(BOX['tl'] + BOX['h'] * inner_w + BOX['tr'], Colors.CYAN)}")
+    print(f"  {colorize('┌' + '─' * inner_w + '┐', Colors.CYAN)}")
 
     # Logo lines
     for line in logo:
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(line.ljust(inner_w - 1), Colors.BOLD + Colors.CYAN)} {colorize(BOX['v'], Colors.CYAN)}")
+        print(f"  {colorize('│', Colors.CYAN)} {colorize(line.ljust(inner_w - 1), Colors.BOLD + Colors.CYAN)} {colorize('│', Colors.CYAN)}")
 
     # Empty line
-    print(f"  {colorize(BOX['v'], Colors.CYAN)} {' ' * inner_w} {colorize(BOX['v'], Colors.CYAN)}")
+    print(f"  {colorize('│', Colors.CYAN)} {' ' * inner_w} {colorize('│', Colors.CYAN)}")
 
     # Tagline
     tagline = f"CloudSeed | cloud-init / Cloudbase-Init VM Template Generator  v{__version__}"
-    print(f"  {colorize(BOX['v'], Colors.CYAN)} {_center_text(tagline, inner_w)} {colorize(BOX['v'], Colors.CYAN)}")
+    print(f"  {colorize('│', Colors.CYAN)} {_center_text(tagline, inner_w)} {colorize('│', Colors.CYAN)}")
 
     platforms = "vSphere  •  KVM  •  Physical  •  Zero deps (stdlib)"
-    print(f"  {colorize(BOX['v'], Colors.CYAN)} {_center_text(platforms, inner_w)} {colorize(BOX['v'], Colors.CYAN)}")
+    print(f"  {colorize('│', Colors.CYAN)} {_center_text(platforms, inner_w)} {colorize('│', Colors.CYAN)}")
 
     # Middle separator
-    print(f"  {colorize(BOX['l'] + BOX['h'] * inner_w + BOX['r'], Colors.CYAN)}")
+    print(f"  {colorize('├' + '─' * inner_w + '┤', Colors.CYAN)}")
 
     # Status bar
     if modules_count:
         status = f"Modules: {modules_count} selected"
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(status.ljust(inner_w), Colors.BOLD + Colors.WHITE)} {colorize(BOX['v'], Colors.CYAN)}")
+        print(f"  {colorize('│', Colors.CYAN)} {colorize(status.ljust(inner_w), Colors.BOLD + Colors.WHITE)} {colorize('│', Colors.CYAN)}")
     elif title:
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {colorize(title.center(inner_w), Colors.BOLD + Colors.WHITE)} {colorize(BOX['v'], Colors.CYAN)}")
+        print(f"  {colorize('│', Colors.CYAN)} {colorize(title.center(inner_w), Colors.BOLD + Colors.WHITE)} {colorize('│', Colors.CYAN)}")
     else:
-        print(f"  {colorize(BOX['v'], Colors.CYAN)} {' ' * inner_w} {colorize(BOX['v'], Colors.CYAN)}")
+        print(f"  {colorize('│', Colors.CYAN)} {' ' * inner_w} {colorize('│', Colors.CYAN)}")
 
     # Bottom border
-    print(f"  {colorize(BOX['bl'] + BOX['h'] * inner_w + BOX['br'], Colors.CYAN)}")
+    print(f"  {colorize('└' + '─' * inner_w + '┘', Colors.CYAN)}")
     print()
 
 
@@ -1591,7 +1591,7 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
         for i, line in enumerate(lines, 1):
             print(f"  {colorize(str(i), Colors.CYAN)}) {line}")
 
-        footer = "[#] toggle [c] config [a] all [n] none [Enter] OK [0/Esc] back"
+        footer = "[#] toggle [c] config [a] all [n] none [Enter] OK [0] back"
         print(f"  {colorize(footer, Colors.GRAY)}")
 
         try:
@@ -1604,7 +1604,7 @@ def _choose_module_multi(prompt: str, available: List[tuple], defaults: List[str
                 print_warn("No modules selected. Select at least one module.")
                 continue
             return list(selected)
-        if sel == "0" or sel == "esc":
+        if sel == "0":
             return "BACK"
         if sel == "a":
             selected = set(module_ids)
