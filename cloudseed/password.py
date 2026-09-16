@@ -30,12 +30,14 @@ except Exception:  # pragma: no cover - platform without crypt module
     _crypt = None
     _HOST_OK = False
 
+SALT_BYTES = 8  # 8 bytes => 16 hex chars
 
-def _openssl_sha512(password: str, salt: str, rounds: int) -> str:
+
+def _openssl_sha512(password: str, salt: str) -> str:
     # `-iter` is not supported by all OpenSSL builds (e.g. LibreSSL); the
     # default is 5000 rounds which is adequate. We ignore `rounds` here.
-    cmd = ["openssl", "passwd", "-6", "-salt", salt, password]
-    out = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    cmd = ["openssl", "passwd", "-6", "-salt", salt, "-stdin"]
+    out = subprocess.run(cmd, input=password, capture_output=True, text=True, timeout=30)
     if out.returncode != 0 or not out.stdout.strip().startswith("$6$"):
         raise RuntimeError("openssl passwd -6 failed: " + out.stderr.strip())
     return out.stdout.strip()
@@ -43,13 +45,13 @@ def _openssl_sha512(password: str, salt: str, rounds: int) -> str:
 
 def hash_password(password: str, rounds: int = 5000) -> str:
     """Return a $6$ SHA-512 crypt hash of `password`."""
-    salt = os.urandom(8).hex()[:16]
+    salt = os.urandom(SALT_BYTES).hex()[: SALT_BYTES * 2]
     if _HOST_OK and _crypt is not None:
         setting = f"$6${'rounds=%d$' % rounds if rounds != 5000 else ''}{salt}$"
         return _crypt.crypt(password, setting)
     if shutil.which("openssl"):
         try:
-            return _openssl_sha512(password, salt, rounds)
+            return _openssl_sha512(password, salt)
         except Exception:
             pass
     from .crypt_sha512 import sha512_crypt

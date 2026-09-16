@@ -148,7 +148,7 @@ def test_openssl_fallback_matches_host():
     from cloudseed.password import _openssl_sha512
     if not shutil.which("openssl"):
         pytest.skip("openssl not on PATH")
-    h = _openssl_sha512("Secret123!", "salt1234567890ab", 1000)
+    h = _openssl_sha512("Secret123!", "salt1234567890ab")
     assert _host.crypt("Secret123!", h) == h
 
 
