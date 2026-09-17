@@ -621,7 +621,7 @@ def build_readme(cfg: TemplateConfig, warnings: List[str] = None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) -> List[str]:
+def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True, dry_run: bool = False) -> List[str] | List[Tuple[str, str]]:
     import json as _json
 
     # Reset overwrite-all state for new generation
@@ -649,6 +649,7 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
             # If overwrite or suffix, continue (the _get_unique_path will handle it)
 
     written: List[str] = []
+    previews: List[Tuple[str, str]] = []  # (filename, content) for dry-run
 
     # Validate and get warnings
     warnings = validate_config(cfg)
@@ -661,9 +662,12 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
         if unique_path is None:
             # User chose to skip
             return
-        with open(unique_path, "w", encoding="utf-8") as fh:
-            fh.write(content)
-        written.append(unique_path)
+        if dry_run:
+            previews.append((name, content))
+        else:
+            with open(unique_path, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            written.append(unique_path)
 
     w("user-data", build_user_data(cfg))
     w("meta-data", build_meta_data(cfg))
@@ -692,6 +696,13 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True) ->
     if unique_root_json is not None:
         with open(unique_root_json, "w", encoding="utf-8") as fh:
             _json.dump(cfg.to_dict(), fh, indent=2)
-        written.append(unique_root_json)
+        if dry_run:
+            previews.append(("cloudseed.json", _json.dumps(cfg.to_dict(), indent=2)))
+        else:
+            written.append(unique_root_json)
     w("README.txt", build_readme(cfg, warnings))
-    return written
+
+    if dry_run:
+        return previews
+    else:
+        return written

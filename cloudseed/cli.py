@@ -23,11 +23,21 @@ from .model import (
 )
 
 
-def _print_generated(written: List[str]) -> None:
-    print("\nGenerated files:")
-    for p in written:
-        print(f"  {p}")
-    print()
+def _print_generated(written: List[str] | List[Tuple[str, str]]) -> None:
+    if not written:
+        return
+    # Check if it's dry-run (list of tuples)
+    if written and isinstance(written[0], tuple):
+        print("\n--- Generated file previews (dry-run) ---")
+        for name, content in written:
+            print(f"\n=== {name} ===")
+            print(content)
+        print("\n--- End previews ---")
+    else:
+        print("\nGenerated files:")
+        for p in written:
+            print(f"  {p}")
+        print()
 
 
 def _print_warnings(warnings: List[str]) -> None:
@@ -142,7 +152,7 @@ def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
             return 1
         return 0 if write_to_cloud_init_path(cfg) else 1
 
-    written = generate_all(cfg, out_dir, interactive=False)
+    written = generate_all(cfg, out_dir, interactive=False, dry_run=args.dry_run)
     _print_generated(written)
 
     if print_output:
@@ -154,7 +164,7 @@ def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
 
 
 def run_interactive(out_dir: str, plaintext: bool = False,
-                    write_cloud_init_path: bool = False) -> int:
+                    write_cloud_init_path: bool = False, dry_run: bool = False) -> int:
     # Setup signal handlers for graceful shutdown
     setup_signal_handlers()
     # print_banner("Welcome")  # Removed duplicate welcome banner
@@ -201,7 +211,7 @@ def run_interactive(out_dir: str, plaintext: bool = False,
             return 1
         return 0 if write_to_cloud_init_path(cfg) else 1
 
-    written = generate_all(cfg, out_dir, interactive=True)
+    written = generate_all(cfg, out_dir, interactive=True, dry_run=dry_run)
     _print_generated(written)
 
     print("\n--- user-data preview ---")
@@ -247,6 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Detect installed cloud-init version on current system and show compatibility.")
     p.add_argument("--write-to-cloud-init-path", action="store_true",
                    help="Write generated user-data directly to /etc/cloud/cloud.cfg.d/99-cloudseed.cfg (Linux only, requires root).")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Preview generated files without writing them to disk.")
     return p
 
 
