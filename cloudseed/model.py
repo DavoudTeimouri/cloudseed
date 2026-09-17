@@ -356,12 +356,16 @@ def _ask_overwrite(filepath: str) -> str:
 _overwrite_all_action = None
 
 
-def _get_unique_path(out_dir: str, filename: str) -> str | None:
+def _get_unique_path(out_dir: str, filename: str, dry_run: bool = False) -> str | None:
     """Get a unique path, asking user if file exists. Returns None if skip."""
     global _overwrite_all_action
     from pathlib import Path
     filepath = Path(out_dir) / filename
     if not filepath.exists():
+        return str(filepath)
+
+    # In dry-run mode, don't prompt - just return the path
+    if dry_run:
         return str(filepath)
 
     # Check if overwrite-all is active
@@ -388,6 +392,7 @@ def _get_unique_path(out_dir: str, filename: str) -> str | None:
     elif action == "overwrite_all":
         _overwrite_all_action = "overwrite"
         return str(filepath)
+    return None
 
 
 

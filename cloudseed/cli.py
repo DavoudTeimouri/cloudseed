@@ -25,8 +25,8 @@ from .model import (
 )
 
 
-def _print_generated(written: List[str] | List[Tuple[str, str]]) -> None:
-    if not written:
+def _print_generated(written: List[str] | List[Tuple[str, str]], quiet: bool = False) -> None:
+    if not written or quiet:
         return
     # Check if it's dry-run (list of tuples)
     if written and isinstance(written[0], tuple):
@@ -137,7 +137,7 @@ def write_to_cloud_init_path(cfg: TemplateConfig) -> bool:
 
 
 def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
-              print_output: bool = False, write_cloud_init_path: bool = False, dry_run: bool = False) -> int:
+              print_output: bool = False, write_cloud_init_path: bool = False, dry_run: bool = False, quiet: bool = False) -> int:
     cfg = load_json(json_path)
     cfg.plaintext_password = plaintext
 
@@ -155,7 +155,7 @@ def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
         return 0 if write_to_cloud_init_path(cfg) else 1
 
     written = generate_all(cfg, out_dir, interactive=False, dry_run=dry_run)
-    _print_generated(written)
+    _print_generated(written, quiet=quiet)
 
     if print_output:
         print("--- user-data preview ---")
@@ -294,7 +294,7 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.json:
         return run_batch(args.json, args.out, args.plaintext_password,
-                         args.print, args.write_to_cloud_init_path, args.dry_run)
+                         args.print, args.write_to_cloud_init_path, args.dry_run, args.quiet)
 
     return run_interactive(args.out, args.plaintext_password, args.write_to_cloud_init_path, args.dry_run)
 

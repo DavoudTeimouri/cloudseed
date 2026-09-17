@@ -28,8 +28,9 @@ def _safe_load_yaml(content: str) -> Any:
     """Minimal YAML parser cloud-config (stdlib only)."""
     lines = []
     for line in content.split('\n'):
-        line = line.strip()
-        if not line or line.startswith('#'):
+        # Preserve leading whitespace for indentation tracking
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith('#'):
             continue
         # Remove inline comments
         if '#' in line:
@@ -112,6 +113,37 @@ def _safe_load_yaml(content: str) -> Any:
                                     break
                                 if lj_indent >= indent + 2 and lj.lstrip().startswith('- '):
                                     item_content = lj.strip()[2:].strip()
+                                    # Check if this list item is a mapping (has nested key-value pairs)
+                                    if ':' in item_content and not item_content.strip().startswith('- '):
+                                        # This looks like "key: value" - parse as dict
+                                        item_parts = item_content.split(':', 1)
+                                        if len(item_parts) == 2:
+                                            item_key = item_parts[0].strip()
+                                            item_val = item_parts[1].strip()
+                                            # Parse the first key-value pair
+                                            item_dict = {item_key: parse_value(item_val)}
+                                            # Look ahead for more key-value pairs at deeper indent
+                                            j = i + 1
+                                            while j < len(lines):
+                                                next_line = lines[j]
+                                                next_indent = len(next_line) - len(next_line.lstrip())
+                                                if next_indent <= indent + 2:
+                                                    break
+                                                if next_indent >= indent + 4 and ':' in next_line:
+                                                    nested_parts = next_line.split(':', 1)
+                                                    if len(nested_parts) == 2:
+                                                        nested_key = nested_parts[0].strip()
+                                                        nested_val = nested_parts[1].strip()
+                                                        item_dict[nested_key] = parse_value(nested_val)
+                                                        j += 1
+                                                    else:
+                                                        break
+                                                else:
+                                                    break
+                                            items.append(item_dict)
+                                            i = j
+                                            continue
+                                    # Fallback: treat as simple value
                                     items.append(parse_value(item_content))
                                     i += 1
                                 else:
