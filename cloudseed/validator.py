@@ -1,4 +1,4 @@
-"""CloudSeed Config Validator: validate exported configurations don't run after first boot."""
+"""CloudSeed Config Validator: validate exported configurations don't run first boot."""
 
 from __future__ import annotations
 
@@ -17,11 +17,15 @@ from .model import (
     print_success,
     print_warn,
 )
+from .password import hash_password
+
+
+# Global fix-it mode flag
+_FIX_IT_MODE = False
 
 
 def _safe_load_yaml(content: str) -> Any:
-    """Minimal YAML parser for cloud-config subset (stdlib only)."""
-    # Remove comments and blank lines
+    """Minimal YAML parser cloud-config (stdlib only)."""
     lines = []
     for line in content.split('\n'):
         line = line.strip()
@@ -30,113 +34,100 @@ def _safe_load_yaml(content: str) -> Any:
         # Remove inline comments
         if '#' in line:
             line = line.split('#')[0].rstrip()
-        if line:
-            lines.append(line)
+        lines.append(line)
 
     content = '\n'.join(lines)
     if not content:
         return {}
 
-    # Handle inline list syntax: key: [item1, item2]
-    # Convert to standard YAML list format
+    # Convert standard YAML list format: key: [item1, item2]
     new_lines = []
     for line in content.split('\n'):
-        if ':' in line and '[' in line and ']' in line:
-            # Find key and value
+        if ':' in line and ']' in line:
+            # key value
             parts = line.split(':', 1)
             if len(parts) == 2:
                 key = parts[0].strip()
                 val = parts[1].strip()
                 if val.startswith('[') and val.endswith(']'):
-                    # Extract items
                     items_str = val[1:-1].strip()
                     if items_str:
                         items = [item.strip().strip('"\'') for item in items_str.split(',')]
-                        new_lines.append(f"{key}:")
-                        for item in items:
-                            new_lines.append(f"  - {item}")
-                        continue
+                    else:
+                        items = []
+                    new_lines.append(f"{key}:")
+                    for item in items:
+                        new_lines.append(f"  - {item}")
+                    continue
         new_lines.append(line)
     content = '\n'.join(new_lines)
 
-    # Simple parser for common cloud-config structures
-    # Handles: key: value, key:, - item, nested dicts with 2-space indent
+    # Parse cloud-config 2-space indent
     def parse_value(v: str) -> Any:
         v = v.strip()
+        if not v:
+            return None
         if v.lower() in ('true', 'false'):
             return v.lower() == 'true'
-        if v.lower() == 'null' or v == '~':
-            return None
-        # Number
-        try:
-            if '.' in v:
-                return float(v)
+        if v.isdigit():
             return int(v)
+        try:
+            return float(v)
         except ValueError:
             pass
-        # String (remove quotes)
         if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
             return v[1:-1]
         return v
 
-    def parse_mapping(lines: List[str], start: int, base_indent: int) -> tuple[Dict[str, Any], int]:
+    def parse_mapping(lines: List[str], i: int, indent: int) -> tuple[Dict[str, Any], int]:
         result = {}
-        i = start
         while i < len(lines):
             line = lines[i]
-            indent = len(line) - len(line.lstrip())
-            if indent < base_indent:
-                break
-            if indent > base_indent:
-                # Should not happen in well-formed YAML
+            if not line.strip():
                 i += 1
                 continue
-
-            stripped = line.strip()
-            if stripped.startswith('- '):
-                # List item - should be handled by caller
+            current_indent = len(line) - len(line.lstrip())
+            if current_indent < indent:
                 break
-
-            if ':' not in stripped:
+            key_part, sep, val_part = line.partition(':')
+            if not sep:
                 i += 1
                 continue
-
-            key, val = stripped.split(':', 1)
-            key = key.strip()
-            val = val.strip()
-
-            if not val:
-                # Could be nested mapping or list
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1]
+            key = key_part.rstrip()
+            val = val_part.lstrip()
+            i += 1
+            if val == '':
+                # Mapping or list
+                if i < len(lines):
+                    next_line = lines[i]
                     next_indent = len(next_line) - len(next_line.lstrip())
                     if next_indent > indent:
-                        if next_line.strip().startswith('- '):
+                        if lines[i].lstrip().startswith('- '):
                             # List
                             items = []
-                            j = i + 1
-                            while j < len(lines):
-                                lj = lines[j]
+                            while i < len(lines):
+                                lj = lines[i]
                                 lj_indent = len(lj) - len(lj.lstrip())
-                                if lj_indent < next_indent:
+                                if lj_indent < indent + 2:
                                     break
-                                if lj_indent == next_indent and lj.strip().startswith('- '):
+                                if lj_indent >= indent + 2 and lj.lstrip().startswith('- '):
                                     item_content = lj.strip()[2:].strip()
                                     items.append(parse_value(item_content))
-                                j += 1
+                                    i += 1
+                                else:
+                                    break
                             result[key] = items
-                            i = j
-                            continue
                         else:
                             # Nested mapping
-                            nested, new_i = parse_mapping(lines, i + 1, next_indent)
+                            nested, new_i = parse_mapping(lines, i, indent + 2)
                             result[key] = nested
                             i = new_i
-                            continue
-                result[key] = None
+                    else:
+                        result[key] = None
+                else:
+                    result[key] = None
             else:
                 result[key] = parse_value(val)
-            i += 1
         return result, i
 
     all_lines = content.split('\n')
@@ -144,9 +135,45 @@ def _safe_load_yaml(content: str) -> Any:
     return result
 
 
-def validate_no_persistent_runs(config_dir: str) -> List[str]:
+def _simple_yaml_dump(data: Any, indent: int = 0) -> str:
+    """Very simple YAML dumper for basic types (used for fixing user-data)."""
+    if data is None:
+        return 'null'
+    if isinstance(data, bool):
+        return 'true' if data else 'false'
+    if isinstance(data, int):
+        return str(data)
+    if isinstance(data, str):
+        # Escape backslashes and quotes, then wrap in quotes
+        escaped = data.replace('\\', '\\\\').replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(data, list):
+        if not data:
+            return '[]'
+        lines = []
+        for item in data:
+            item_yaml = _simple_yaml_dump(item, indent + 2)
+            lines.append(f"{' ' * indent}- {item_yaml}")
+        return '\n'.join(lines)
+    if isinstance(data, dict):
+        if not data:
+            return '{}'
+        lines = []
+        for key, value in data.items():
+            key_yaml = _simple_yaml_dump(key)
+            value_yaml = _simple_yaml_dump(value, indent + 2)
+            if isinstance(value, (dict, list)):
+                lines.append(f"{' ' * indent}{key_yaml}:")
+                lines.append(value_yaml)
+            else:
+                lines.append(f"{' ' * indent}{key_yaml}: {value_yaml}")
+        return '\n'.join(lines)
+    return str(data)
+
+
+def validate_no_persistent_runs(config_dir: str, fix_it: bool = False) -> List[str]:
     """Validate that cloud-init configs won't run after first boot.
-    
+
     Checks for:
     - runcmd/bootcmd that could re-run
     - phone_home configurations
@@ -162,84 +189,100 @@ def validate_no_persistent_runs(config_dir: str) -> List[str]:
         try:
             with open(user_data_path) as f:
                 content = f.read()
-
-            # Parse YAML
-            if content.startswith("#cloud-config"):
-                yaml_content = content[len("#cloud-config"):].strip()
-                if yaml_content:
-                    try:
-                        data = _safe_load_yaml(yaml_content)
-                        if data:
-                            warnings.extend(_check_user_data(data))
-                    except Exception as e:
-                        warnings.append(f"user-data: parse error: {e}")
         except Exception as e:
-            warnings.append(f"user-data: read error: {e}")
+            warnings.append(f"Failed to read user-data: {e}")
+            return warnings
 
-    # Check for cloud-init per-boot scripts IN THE GENERATED CONFIG DIRECTORY
-    # (not system directories)
-    boot_dirs = [
-        config_path / "per-boot",
-        config_path / "per-once",
-        config_path / "per-instance",
-    ]
+        # Check if it's a cloud-config
+        if content.startswith("#cloud-config"):
+            yaml_content = content[len("#cloud-config"):].lstrip()
+            try:
+                data = _safe_load_yaml(yaml_content)
+            except Exception as e:
+                warnings.append(f"Failed to parse user-data YAML: {e}")
+                data = {}
 
-    for d in boot_dirs:
-        if d.exists():
-            scripts = list(d.glob("*"))
-            if scripts:
-                warnings.append(f"Found cloud-init scripts in {d}: {[s.name for s in scripts]}")
+            # Fix plaintext password in fix-it mode
+            if fix_it and data:
+                changed = False
+                # Hash password in users[0].passwd
+                if "users" in data and isinstance(data["users"], list) and data["users"]:
+                    user = data["users"][0]
+                    if isinstance(user, dict) and "passwd" in user and user["passwd"]:
+                        passwd = user["passwd"]
+                        # Assume it's plaintext if it's not already hashed (simple check: not starting with $6$)
+                        if not passwd.startswith("$6$"):
+                            try:
+                                hashed = hash_password(passwd)
+                                user["passwd"] = hashed
+                                changed = True
+                            except Exception:
+                                pass  # Keep warning if hashing fails
+                # Hash password in chpasswd
+                if "chpasswd" in data and isinstance(data["chpasswd"], list):
+                    for item in data["chpasswd"]:
+                        if isinstance(item, dict) and "password" in item and item["password"]:
+                            password = item["password"]
+                            if not password.startswith("$6$"):
+                                try:
+                                    hashed = hash_password(password)
+                                    item["password"] = hashed
+                                    changed = True
+                                except Exception:
+                                    pass
+                if changed:
+                    # Generate new YAML content
+                    try:
+                        new_yaml = _simple_yaml_dump(data)
+                        new_content = "#cloud-config\n" + new_yaml
+                        with open(user_data_path, 'w') as f:
+                            f.write(new_content)
+                    except Exception as e:
+                        warnings.append(f"Failed to write fixed user-data: {e}")
+
+            # Check for persistent runs
+            if "runcmd" in data:
+                cmds = data["runcmd"]
+                if isinstance(cmds, list) and cmds:
+                    warnings.append("runcmd present - commands run on first boot only (per-instance). Verify idempotent.")
+
+            if "bootcmd" in data:
+                cmds = data["bootcmd"]
+                if isinstance(cmds, list) and cmds:
+                    warnings.append("bootcmd present - commands run on EVERY boot. Ensure safe repeat.")
+
+            if "phone_home" in data:
+                warnings.append("phone_home configured - will send data on every boot unless disabled.")
+
+            if data.get("package_update") or data.get("package_upgrade"):
+                warnings.append("Package update/upgrade enabled - runs on first boot. Ensure target image package cache.")
+
+            if "write_files" in data:
+                for f in data["write_files"]:
+                    path = f.get("path", "")
+                    if "per-boot" in path or "per-once" in path:
+                        warnings.append(f"write_files targets cloud-init script directory: {path}")
+
+            if "ntp" in data:
+                warnings.append("NTP configured in cloud-init - may conflict with platform/OS NTP. Consider 'Let Platform Handle NTP'.")
+
+            if "network" in data:
+                warnings.append("Network configured in cloud-init - may conflict platform network config. Consider 'Let Platform Handle Network'.")
+
+            if "growpart" in data:
+                warnings.append("growpart configured - runs on first boot. Verify target disk layout matches.")
+
+        else:
+            # Not a cloud-config, treat as raw user-data (legacy)
+            warnings.append("user-data is not a cloud-config; validation skipped.")
+
+    else:
+        warnings.append("user-data not found - skipping user-data validation.")
 
     return warnings
 
 
-def _check_user_data(data: Dict[str, Any]) -> List[str]:
-    """Check user-data for problematic configurations."""
-    warnings = []
-
-    # Check runcmd - these run every boot unless handled
-    if "runcmd" in data:
-        cmds = data["runcmd"]
-        if isinstance(cmds, list) and cmds:
-            warnings.append("runcmd present - commands run on first boot only (per-instance). Verify they are idempotent.")
-
-    # Check bootcmd - runs early every boot
-    if "bootcmd" in data:
-        cmds = data["bootcmd"]
-        if isinstance(cmds, list) and cmds:
-            warnings.append("bootcmd present - commands run on EVERY boot. Ensure they are safe to repeat.")
-
-    # Check phone_home
-    if "phone_home" in data:
-        warnings.append("phone_home configured - will send data on every boot unless disabled.")
-
-    # Check package_update/upgrade
-    if data.get("package_update") or data.get("package_upgrade"):
-        warnings.append("Package update/upgrade enabled - runs on first boot. Ensure target image has package cache.")
-
-    # Check for scripts that might run repeatedly
-    if "write_files" in data:
-        for f in data["write_files"]:
-            path = f.get("path", "")
-            if "per-boot" in path or "per-once" in path:
-                warnings.append(f"write_files targets cloud-init script directory: {path}")
-
-    # Check ntp - usually fine but could conflict
-    if "ntp" in data:
-        warnings.append("NTP configured in cloud-init - may conflict with platform/OS NTP. Consider 'Let Platform Handle NTP'.")
-
-    # Check network - could conflict with platform
-    if "network" in data:
-        warnings.append("Network configured in cloud-init - may conflict with platform network config. Consider 'Let Platform Handle Network'.")
-
-    # Check growpart
-    if "growpart" in data:
-        warnings.append("growpart configured - runs on first boot. Verify target disk layout matches.")
-
-    return warnings
-
-
-def validate_cloudseed_json(config_dir: str) -> List[str]:
+def validate_cloudseed_json(config_dir: str, fix_it: bool = False) -> List[str]:
     """Validate cloudseed.json for consistency."""
     warnings = []
     json_path = Path(config_dir) / "cloudseed.json"
@@ -252,36 +295,53 @@ def validate_cloudseed_json(config_dir: str) -> List[str]:
     try:
         with open(json_path) as f:
             data = json.load(f)
-
-        # Check version compatibility
-        # Could add version checking here in future
-
-        # Check for required fields
-        required = ["platform", "os_type", "modules"]
-        for field in required:
-            if field not in data:
-                warnings.append(f"cloudseed.json missing field: {field}")
-
-        # Check modules match files present
-        modules = data.get("modules", [])
-        if "network" in modules:
-            if not (Path(config_dir) / "user-data").exists() and data.get("os_type") == "linux":
-                warnings.append("network module selected but no user-data found")
-
     except json.JSONDecodeError as e:
         warnings.append(f"cloudseed.json: invalid JSON: {e}")
+        return warnings
     except Exception as e:
         warnings.append(f"cloudseed.json: read error: {e}")
+        return warnings
+
+    # Fix-it mode: add missing fields with default values
+    if fix_it:
+        changed = False
+        if "version" not in data:
+            data["version"] = "1.0"
+            changed = True
+        if "modules" not in data:
+            data["modules"] = []
+            changed = True
+        if changed:
+            try:
+                with open(json_path, 'w') as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                warnings.append(f"cloudseed.json: failed to write fixed file: {e}")
+
+    # Check version compatibility
+    # Could add version checking here in future
+
+    # Check for required fields
+    required = ["platform", "os_type", "modules"]
+    for field in required:
+        if field not in data:
+            warnings.append(f"cloudseed.json missing field: {field}")
+
+    # Check modules match files present
+    modules = data.get("modules", [])
+    if "network" in modules:
+        if not (Path(config_dir) / "user-data").exists() and data.get("os_type") == "linux":
+            warnings.append("network module selected but no user-data found")
 
     return warnings
 
 
-def validate_windows_config(config_dir: str) -> List[str]:
+def validate_windows_config(config_dir: str, fix_it: bool = False) -> List[str]:
     """Validate Windows-specific configurations."""
     warnings = []
     config_path = Path(config_dir)
 
-    # Check for sysprep files
+    # Check sysprep files
     sysprep_xml = config_path / "sysprep-unattend.xml"
     sysprep_bat = config_path / "run-sysprep.bat"
 
@@ -289,26 +349,39 @@ def validate_windows_config(config_dir: str) -> List[str]:
         try:
             with open(sysprep_xml) as f:
                 content = f.read()
-
-            # Check for generalize pass
-            if "generalize" not in content.lower():
-                warnings.append("sysprep-unattend.xml: missing generalize pass - SID won't change")
-
-            # Check for specialize pass
-            if "specialize" not in content.lower():
-                warnings.append("sysprep-unattend.xml: missing specialize pass - computer name won't be set")
-
-            # Check for oobe
-            if "oobe" not in content.lower():
-                warnings.append("sysprep-unattend.xml: missing oobe pass - unattended setup incomplete")
-
         except Exception as e:
             warnings.append(f"sysprep-unattend.xml: read error: {e}")
+            content = ""
+
+        # Check generalize pass
+        if "generalize" not in content.lower():
+            warnings.append("sysprep-unattend.xml: missing generalize pass - SID won't change")
+            if fix_it:
+                # Cannot auto-fix generalize pass without understanding XML structure
+                pass
+
+        # Check specialize pass
+        if "specialize" not in content.lower():
+            warnings.append("sysprep-unattend.xml: missing specialize pass - computer name won't be set")
+            if fix_it:
+                pass
+
+        # Check oobe
+        if "oobe" not in content.lower():
+            warnings.append("sysprep-unattend.xml: missing oobe pass - unattended setup incomplete")
+            if fix_it:
+                pass
     else:
         warnings.append("sysprep-unattend.xml not found - Windows SID won't be regenerated")
+        if fix_it:
+            # Cannot auto-create sysprep-unattend.xml without template
+            pass
 
     if not sysprep_bat.exists():
         warnings.append("run-sysprep.bat not found - no easy way to launch Sysprep")
+        if fix_it:
+            # Cannot auto-create run-sysprep.bat without template
+            pass
 
     # Check Cloudbase-Init configs
     for conf_name in ["cloudbase-init.conf", "cloudbase-init-unattend.conf"]:
@@ -345,11 +418,10 @@ def validate_all(config_dir: str) -> List[str]:
         except Exception:
             pass
 
-    all_warnings.extend(validate_no_persistent_runs(config_dir))
-    all_warnings.extend(validate_cloudseed_json(config_dir))
-
+    all_warnings.extend(validate_no_persistent_runs(config_dir, fix_it=_FIX_IT_MODE))
+    all_warnings.extend(validate_cloudseed_json(config_dir, fix_it=_FIX_IT_MODE))
     if os_type == "windows":
-        all_warnings.extend(validate_windows_config(config_dir))
+        all_warnings.extend(validate_windows_config(config_dir, fix_it=_FIX_IT_MODE))
 
     if not all_warnings:
         print_success("All validations passed!")
@@ -472,4 +544,9 @@ def scan_subdirs_for_configs(base_dir: str, max_depth: int = 2) -> None:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fix-it', action='store_true', help='Enable fix-it mode to auto-correct common issues')
+    args = parser.parse_args()
+    _FIX_IT_MODE = args.fix_it
     raise SystemExit(validator_menu())

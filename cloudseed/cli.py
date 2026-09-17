@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import platform
 import subprocess
@@ -11,6 +12,7 @@ from typing import List
 
 from . import __version__
 from .generate import build_meta_data, build_user_data, generate_all
+from .logging_config import set_json_logs, set_log_level
 
 # Import banner from model
 from .model import (
@@ -135,7 +137,7 @@ def write_to_cloud_init_path(cfg: TemplateConfig) -> bool:
 
 
 def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
-              print_output: bool = False, write_cloud_init_path: bool = False) -> int:
+              print_output: bool = False, write_cloud_init_path: bool = False, dry_run: bool = False) -> int:
     cfg = load_json(json_path)
     cfg.plaintext_password = plaintext
 
@@ -152,7 +154,7 @@ def run_batch(json_path: str, out_dir: str, plaintext: bool = False,
             return 1
         return 0 if write_to_cloud_init_path(cfg) else 1
 
-    written = generate_all(cfg, out_dir, interactive=False, dry_run=args.dry_run)
+    written = generate_all(cfg, out_dir, interactive=False, dry_run=dry_run)
     _print_generated(written)
 
     if print_output:
@@ -259,12 +261,28 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Write generated user-data directly to /etc/cloud/cloud.cfg.d/99-cloudseed.cfg (Linux only, requires root).")
     p.add_argument("--dry-run", action="store_true",
                    help="Preview generated files without writing them to disk.")
+    p.add_argument("--verbose", action="store_true",
+                   help="Enable verbose output")
+    p.add_argument("--quiet", action="store_true",
+                   help="Suppress non-essential output")
+    p.add_argument("--json-logs", action="store_true",
+                   help="Output logs in JSON format")
     return p
 
 
 def main(argv: List[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     args = build_parser().parse_args(argv)
+
+    # Configure logging
+    if args.json_logs:
+        set_json_logs(True)
+    if args.verbose:
+        set_log_level(logging.DEBUG)
+    elif args.quiet:
+        set_log_level(logging.WARNING)
+    else:
+        set_log_level(logging.INFO)
 
     # Handle --detect-cloud-init early
     if args.detect_cloud_init:
@@ -276,9 +294,9 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.json:
         return run_batch(args.json, args.out, args.plaintext_password,
-                         args.print, args.write_to_cloud_init_path)
+                         args.print, args.write_to_cloud_init_path, args.dry_run)
 
-    return run_interactive(args.out, args.plaintext_password, args.write_to_cloud_init_path)
+    return run_interactive(args.out, args.plaintext_password, args.write_to_cloud_init_path, args.dry_run)
 
 
 if __name__ == "__main__":

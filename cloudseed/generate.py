@@ -10,6 +10,7 @@ import uuid
 from typing import Any, Dict, List
 
 from .model import TemplateConfig, _ask_overwrite, print_info, print_warn
+import logging
 
 # --- minimal YAML emitter --------------------------------------------------
 
@@ -635,6 +636,8 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True, dr
     plat_name = "vsphere" if cfg.platform == "vsphere" else cfg.platform
     subdir = os.path.join(out_dir, f"{plat_name}-{cfg.os_type}")
     os.makedirs(subdir, exist_ok=True)
+    if dry_run:
+        logging.debug("generate_all dry_run=True, cfg=%s, out_dir=%s, interactive=%s", cfg, out_dir, interactive)
 
     # Check for existing cloudseed.json in the platform/OS subdir (collision detection)
     subdir_json = os.path.join(subdir, "cloudseed.json")
