@@ -23,6 +23,35 @@ from .model import (
     print_section,
     setup_signal_handlers,
 )
+    
+
+
+def generate_bash_completion(parser):
+    """Generate bash completion script."""
+    options = _get_options_from_parser(parser)
+    opts_str = ' '.join(options)
+    return "# CloudSeed bash completion\ncomplete -W '{}' cloudseed\n".format(opts_str)
+
+
+def generate_zsh_completion(parser):
+    """Generate zsh completion script."""
+    options = _get_options_from_parser(parser)
+    opts_str = ' '.join(options)
+    return "# CloudSeed zsh completion\ncompdef '_values \"CloudSeed options\" {}' cloudseed\n".format(opts_str)
+
+
+def generate_fish_completion(parser):
+    """Generate fish completion script."""
+    options = _get_options_from_parser(parser)
+    opts_str = ' '.join(options)
+    return "# CloudSeed fish completion\ncomplete -c cloudseed -o '{}' -d 'CloudSeed options'\n".format(opts_str)
+def _get_options_from_parser(parser):
+    """Extract all option strings from the parser."""
+    options = set()
+    for action in parser._actions:
+        for option_string in action.option_strings:
+            options.add(option_string)
+    return sorted(options)
 
 
 def _print_generated(written: List[str] | List[Tuple[str, str]], quiet: bool = False) -> None:
@@ -169,7 +198,6 @@ def run_interactive(out_dir: str, plaintext: bool = False,
                     write_cloud_init_path: bool = False, dry_run: bool = False) -> int:
     # Setup signal handlers for graceful shutdown
     setup_signal_handlers()
-    # print_banner("Welcome")  # Removed duplicate welcome banner
     result = collect_interactive()
 
     # If collect_interactive returns an int (from submenu), return it
@@ -202,7 +230,7 @@ def run_interactive(out_dir: str, plaintext: bool = False,
         except ImportError:
             pass  # readline not available (Windows default Python)
 
-        out_dir = input(f"\nOutput directory [{default_out}]: ").strip() or default_out
+    out_dir = input(f"\nOutput directory [{default_out}]: ").strip() or default_out
 
     warnings = validate_config(cfg)
     _print_warnings(warnings)
@@ -267,12 +295,42 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Suppress non-essential output")
     p.add_argument("--json-logs", action="store_true",
                    help="Output logs in JSON format")
+    p.add_argument("--validate", metavar="DIR",
+                   help="Validate the config in DIR and print warnings")
+    p.add_argument("--fix-it", action="store_true",
+                   help="Enable fix-it mode when validating (auto-correct common issues)")
     return p
 
 
 def main(argv: List[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
+
+    # Handle completion subcommand
+    if argv and argv[0] == 'completion':
+        if len(argv) < 2:
+            print("Error: Please specify a shell (bash, zsh, fish)", file=sys.stderr)
+            return 1
+        shell = argv[1]
+        if shell not in ('bash', 'zsh', 'fish'):
+            print(f"Error: Unsupported shell '{shell}'. Supported shells: bash, zsh, fish", file=sys.stderr)
+            return 1
+        parser = build_parser()
+        if shell == 'bash':
+            script = generate_bash_completion(parser)
+        elif shell == 'zsh':
+            script = generate_zsh_completion(parser)
+        else:  # fish
+            script = generate_fish_completion(parser)
+        print(script, end='')
+        return 0
+
     args = build_parser().parse_args(argv)
+    if args.validate:
+        from cloudseed import validator
+        validator._FIX_IT_MODE = args.fix_it
+        validator.validate_all(args.validate)
+        return 0
+
 
     # Configure logging
     if args.json_logs:

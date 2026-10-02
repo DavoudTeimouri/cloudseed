@@ -661,7 +661,7 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True, dr
         if content == "":
             return
         # Get unique path (handles overwrite/suffix/skip)
-        unique_path = _get_unique_path(subdir, name, dry_run=dry_run)
+        unique_path = _get_unique_path(subdir, name, dry_run=dry_run, interactive=interactive)
         if unique_path is None:
             # User chose to skip
             return
@@ -695,7 +695,7 @@ def generate_all(cfg: TemplateConfig, out_dir: str, interactive: bool = True, dr
     # Write cloudseed.json to out_dir root (not subdir) for reusability
     # But check if it already exists in the subdir
     root_json = os.path.join(out_dir, "cloudseed.json")
-    unique_root_json = _get_unique_path(out_dir, "cloudseed.json", dry_run=dry_run)
+    unique_root_json = _get_unique_path(out_dir, "cloudseed.json", dry_run=dry_run, interactive=interactive)
     if unique_root_json is not None:
         with open(unique_root_json, "w", encoding="utf-8") as fh:
             _json.dump(cfg.to_dict(), fh, indent=2)
