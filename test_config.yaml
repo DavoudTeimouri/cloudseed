@@ -1,0 +1,17 @@
+platform: local
+os: linux
+hostname: test-vm
+users:
+  - name: admin
+    password: "hashed_password"
+    ssh_keys:
+      - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ..."
+    sudo: true
+ssh:
+  enabled: true
+  password_auth: false
+network:
+  mode: dhcp
+locale:
+  timezone: UTC
+  locale: en_US.UTF-8

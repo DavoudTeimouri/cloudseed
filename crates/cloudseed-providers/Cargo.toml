@@ -1,0 +1,20 @@
+[package]
+name = "cloudseed-providers"
+version = "2.1.6"
+edition = "2021"
+
+[dependencies]
+cloudseed-core = { path = "../cloudseed-core" }
+cloudseed-templates = { path = "../cloudseed-templates" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+
+[features]
+default = ["aws", "azure", "gcp"]
+aws = []
+azure = []
+gcp = []
+
+[package.metadata]
+check-cfg = ["cfg(feature = \"aws\")", "cfg(feature = \"azure\")", "cfg(feature = \"gcp\")"]

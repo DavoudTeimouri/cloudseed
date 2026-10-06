@@ -1,0 +1,16 @@
+[package]
+name = "cloudseed-core"
+version = "2.1.6"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+toml = "0.8"
+anyhow = "1.0"
+
+[features]
+default = ["aws", "azure", "gcp"]
+aws = []
+azure = []
+gcp = []

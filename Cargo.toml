@@ -1,0 +1,26 @@
+[workspace]
+members = [
+    "crates/cloudseed-cli",
+    "crates/cloudseed-core",
+    "crates/cloudseed-providers",
+    "crates/cloudseed-templates",
+    "crates/cloudseed-testutils",
+]
+resolver = "2"
+
+[workspace.package]
+version = "2.1.6"
+edition = "2021"
+license = "MIT"
+description = "CloudSeed - Generate cloud-init / Cloudbase-Init VM templates for vSphere, KVM, and Physical (Linux + Windows)."
+repository = "https://github.com/DavoudTeimouri/cloudseed"
+authors = ["Davoud Teimouri <davoud@teimouri.com>"]
+keywords = ["cloud-init", "cloudbase-init", "vsphere", "kvm", "vm", "provisioning", "sysprep", "infrastructure-as-code", "vm-template", "golden-image"]
+categories = ["command-line-utilities", "system-tools", "development-tools"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -1,0 +1,8 @@
+[package]
+name = "cloudseed-testutils"
+version = "2.1.6"
+edition = "2021"
+
+[dependencies]
+cloudseed-core = { path = "../cloudseed-core" }
+anyhow = "1.0"

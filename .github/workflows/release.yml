@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag release (e.g., v2.1.0)'
+        description: 'Tag release (e.g., v2.1.6)'
         required: true
-        default: 'v2.1.0'
+        default: 'v2.1.6'
 
 permissions:
   contents: write
@@ -22,17 +22,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
         with:
-          python-version: '3.12'
-      - name: Install PyInstaller
-        run: pip install pyinstaller
-      - name: Build portable binary
-        run: python build_dist.py
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build CLI binary (release)
+        run: cargo build --release --package cloudseed-cli
       - name: Create ZIP archive
         id: zip
         run: |
+          mkdir -p dist
+          cp target/release/cloudseed-cli dist/cloudseed
           cd dist
           zip ../cloudseed-linux-x86_64.zip cloudseed
           cd ..
@@ -69,19 +76,26 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
         with:
-          python-version: '3.12'
-      - name: Install PyInstaller
-        run: pip install pyinstaller
-      - name: Build portable binary
-        run: python build_dist.py
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build CLI binary (release)
+        run: cargo build --release --package cloudseed-cli
       - name: Create ZIP archive
         id: zip
         run: |
+          mkdir -p dist
+          copy target\release\cloudseed-cli.exe dist\cloudseed.exe
           cd dist
-          7z a ../cloudseed-windows-x86_64.zip cloudseed.exe
+          7z a ..\cloudseed-windows-x86_64.zip cloudseed.exe
           cd ..
           echo "zip_path=cloudseed-windows-x86_64.zip" >> $env:GITHUB_OUTPUT
           echo "asset_name=cloudseed-windows-x86_64.zip" >> $env:GITHUB_OUTPUT

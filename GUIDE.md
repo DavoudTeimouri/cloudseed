@@ -13,33 +13,33 @@ out/
 ├── vsphere-linux/
 │   ├── user-data
 │   ├── meta-data
-│   ├── cloudseed.json
+│   ├── cloudseed.yaml
 │   └── README.txt
 ├── kvm-windows/
 │   ├── cloudbase-init.conf
 │   ├── cloudbase-init-unattend.conf
 │   ├── sysprep-unattend.xml
 │   ├── run-sysprep.bat
-│   ├── cloudseed.json
+│   ├── cloudseed.yaml
 │   └── README.txt
 └── physical-linux/
     ├── user-data
     ├── meta-data
-    ├── cloudseed.json
+    ├── cloudseed.yaml
     └── README.txt
 ```
 
 **Linux** (`out/<platform>-linux/`)
 - `user-data` — the cloud-config customization
 - `meta-data` — instance identity (hostname)
-- `cloudseed.json` — the config itself (re-run or tweak later)
+- `cloudseed.yaml` — the config itself (re-run or tweak later)
 - `README.txt` — quick reference with warnings
 
 **Windows** (`out/<platform>-windows/`)
 - `cloudbase-init.conf` / `cloudbase-init-unattend.conf` — Cloudbase-Init service config
 - `sysprep-unattend.xml` — Sysprep answer file (generates a **new SID**)
 - `run-sysprep.bat` — runs Sysprep generalize
-- `cloudseed.json`, `README.txt`
+- `cloudseed.yaml`, `README.txt`
 
 **vSphere extras** (when enabled, in `out/vsphere-<os>/`)
 - `vsphere-customization-spec.xml` — vSphere Guest Customization Specification (XML)
@@ -292,10 +292,10 @@ sudo cloud-init clean --reboot
 
 ## 12. Re-using a config
 
-`cloudseed.json` is the full config. Re-apply without the menu:
+`cloudseed.yaml` is the full config. Re-apply without the menu:
 
 ```bash
-cloudseed --json out/cloudseed.json --out out2
+cloudseed --json out/cloudseed.yaml --out out2
 ```
 
 ---
@@ -314,26 +314,6 @@ The binary is fully self-contained and runs the same menu on Windows and Linux.
 
 ---
 
-## 14. Toolbox — External Tools (v1.1.0+)
-
-### Windows SID Change without Sysprep
-
-Alternative to Sysprep for already-cloned Windows VMs:
-
-```bash
-cloudseed  # Main Menu → Toolbox → Download SID Changer
-```
-
-- Downloads `sidchanger.exe` (from stratus/sidchanger)
-- Copy to target Windows VM
-- Run as Administrator: `sidchanger.exe`
-- Reboot — Machine SID changed without full Sysprep
-
-**Warning**: Only use on cloned VMs that were NOT sysprepped. This is a workaround, not a replacement for proper image preparation.
-
----
-
-## 15. Config Validator (v1.1.0+)
 
 Validate exported configurations **after generation** or on existing config directories:
 
@@ -343,7 +323,7 @@ cloudseed  # Main Menu → Config Validator → Validate a config directory
 
 Checks:
 - **No persistent runs**: `runcmd` (per-instance), `bootcmd` (every boot), `phone_home`, package update/upgrade
-- **cloudseed.json consistency**: required fields, module/file matching
+- **cloudseed.yaml consistency**: required fields, module/file matching
 - **Windows**: sysprep-unattend.xml (generalize/specialize/oobe passes), Cloudbase-Init configs
 
 ### Example: Validate a config directory
@@ -370,56 +350,6 @@ Warnings: 2
 
 ---
 
-## 16. Cloud-Init Doctor (v1.1.0+)
-
-Diagnose cloud-init issues on a **running system** (requires cloud-init installed locally):
-
-```bash
-cloudseed  # Main Menu → Cloud-Init Doctor → Full Diagnosis
-```
-
-Checks:
-- **Cloud-init status**: version, enabled, running, stage completion (generator, local, network, config, final)
-- **Configuration**: merged config query, config file locations
-- **Boot & services**: systemd status for all cloud-init services, failed units
-- **Network**: netplan, networkd, current interfaces
-- **Disk space**: df output with low-space warnings
-- **Save report**: JSON output for CI/CD integration
-
-### Example: Full diagnosis output
-
-```bash
-$ cloudseed
-# Select: Cloud-Init Doctor
-# Select: Full Diagnosis
-
-Running comprehensive cloud-init health check...
-============================================================
-DIAGNOSIS SUMMARY
-============================================================
-Timestamp: 2026-08-28T10:30:45.123456
-Platform: Linux-6.8.0-138-generic-x86_64-with-glibc2.39
-Cloud-init: 24.1 (✅ Fully supported (all modules))
-Status: done
-Errors: 0
-Warnings: 1
-============================================================
-⚠️  WARNINGS:
-  - [cloud_init] cloud-init analyze show failed: cloud-init analyze not available
-```
-
-### Save diagnosis report for CI/CD
-
-```bash
-# Select: Save Diagnosis Report (JSON)
-# Output: cloudseed-doctor-20260828-103045.json
-```
-
-The JSON report contains all checks for automated processing.
-
----
-
-## 17. Complete workflow: Create a template VM (Linux)
 
 ```bash
 # 1. Generate config
@@ -547,7 +477,7 @@ When enabled, CloudSeed generates additional metadata and instructions in `READM
    - Includes multi-confirmation for production safety (typed confirmations: `PHYSICAL-OK`, `NO-ADMIN-OK`, `I-UNDERSTAND`)
    - Can generate a standalone cleanup script for manual execution on target VMs
 
-> **Note**: These settings are **informational** when generating configs for provisioning. They do not affect the generated `user-data`/`meta-data` directly. Instead, they are recorded in `cloudseed.json` and explained in `README.txt` to guide the template creation process.
+> **Note**: These settings are **informational** when generating configs for provisioning. They do not affect the generated `user-data`/`meta-data` directly. Instead, they are recorded in `cloudseed.yaml` and explained in `README.txt` to guide the template creation process.
 
 ---\n## 22. Banner and Menu Overview (v2.0.0+)
 
