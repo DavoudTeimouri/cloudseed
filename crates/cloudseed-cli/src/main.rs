@@ -1,12 +1,68 @@
 use clap::{Parser, Subcommand, CommandFactory};
 use clap_complete::Shell;
-use cloudseed_core::Config;
+use cloudseed_core::{Config, TimezoneConfig};
 use cloudseed_providers::get_provider;
 use serde_yaml;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use toml;
 use tracing::{Level};
+
+// Common IANA timezone regions
+const TIMEZONE_REGIONS: &[&str] = &[
+    "Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic", "Australia", "Europe", "Indian", "Pacific",
+];
+
+// Simplified IANA timezone database (common timezones)
+const COMMON_TIMEZONES: &[&str] = &[
+    "UTC",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Anchorage",
+    "America/Phoenix",
+    "America/Toronto",
+    "America/Vancouver",
+    "America/Mexico_City",
+    "America/Sao_Paulo",
+    "America/Buenos_Aires",
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Europe/Rome",
+    "Europe/Madrid",
+    "Europe/Amsterdam",
+    "Europe/Stockholm",
+    "Europe/Vienna",
+    "Europe/Warsaw",
+    "Europe/Moscow",
+    "Europe/Istanbul",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Asia/Hong_Kong",
+    "Asia/Singapore",
+    "Asia/Dubai",
+    "Asia/Tel_Aviv",
+    "Asia/Tehran",
+    "Asia/Kolkata",
+    "Asia/Bangkok",
+    "Asia/Seoul",
+    "Australia/Sydney",
+    "Australia/Melbourne",
+    "Australia/Perth",
+    "Australia/Brisbane",
+    "Australia/Adelaide",
+    "Pacific/Auckland",
+    "Pacific/Honolulu",
+    "Pacific/Fiji",
+    "Atlantic/Reykjavik",
+    "Africa/Cairo",
+    "Africa/Johannesburg",
+    "Africa/Lagos",
+    "Indian/Mauritius",
+];
 
 #[derive(Parser)]
 #[command(name = "cloudseed")]
@@ -61,6 +117,147 @@ enum Commands {
         /// Shell to generate completion for (bash, zsh, fish)
         shell: String,
     },
+
+    /// Interactively configure timezone
+    Timezone {
+        /// Path to the configuration file to update
+        #[arg(short, long)]
+        config: String,
+    },
+}
+
+fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
+    // Load existing config
+    let mut config = Config::from_file(&config_path)?;
+    
+    println!("Timezone Configuration");
+    println!("======================");
+    println!();
+    
+    // Show current timezone if set
+    if let Some(tz) = &config.timezone {
+        if let Some(zone) = &tz.zone {
+            println!("Current timezone: {}", zone);
+        } else {
+            println!("Current timezone: (not set)");
+        }
+    } else {
+        println!("Current timezone: (not set)");
+    }
+    println!();
+    
+    // Step 1: Select region
+    println!("Step 1: Select region");
+    println!("---------------------");
+    for (i, region) in TIMEZONE_REGIONS.iter().enumerate() {
+        println!("  {}. {}", i + 1, region);
+    }
+    println!("  {}. Custom IANA timezone", TIMEZONE_REGIONS.len() + 1);
+    println!();
+    
+    let region_idx = loop {
+        print!("Select region [1-{}]: ", TIMEZONE_REGIONS.len() + 1);
+        std::io::stdout().flush()?;
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        let input = input.trim();
+        
+        if let Ok(idx) = input.parse::<usize>() {
+            if idx >= 1 && idx <= TIMEZONE_REGIONS.len() + 1 {
+                break idx - 1;
+            }
+        }
+        println!("Invalid selection. Please enter a number between 1 and {}.", TIMEZONE_REGIONS.len() + 1);
+    };
+    
+    let selected_timezone = if region_idx == TIMEZONE_REGIONS.len() {
+        // Custom IANA timezone
+        print!("Enter IANA timezone (e.g., America/New_York): ");
+        std::io::stdout().flush()?;
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        input.trim().to_string()
+    } else {
+        // Step 2: Select timezone within region
+        let region = TIMEZONE_REGIONS[region_idx];
+        let region_timezones: Vec<&str> = COMMON_TIMEZONES
+            .iter()
+            .filter(|tz| tz.starts_with(&format!("{}/", region)))
+            .copied()
+            .collect();
+        
+        if region_timezones.is_empty() {
+            println!("No common timezones found for region {}. Using UTC.", region);
+            "UTC".to_string()
+        } else {
+            println!();
+            println!("Step 2: Select timezone in {}", region);
+            println!("{}", "-".repeat(20 + region.len()));
+            for (i, tz) in region_timezones.iter().enumerate() {
+                println!("  {}. {}", i + 1, tz);
+            }
+            println!("  {}. Other...", region_timezones.len() + 1);
+            println!();
+            
+            let tz_idx = loop {
+                print!("Select timezone [1-{}]: ", region_timezones.len() + 1);
+                std::io::stdout().flush()?;
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+                let input = input.trim();
+                
+                if let Ok(idx) = input.parse::<usize>() {
+                    if idx >= 1 && idx <= region_timezones.len() + 1 {
+                        break idx - 1;
+                    }
+                }
+                println!("Invalid selection. Please enter a number between 1 and {}.", region_timezones.len() + 1);
+            };
+            
+            if tz_idx == region_timezones.len() {
+                // Other
+                print!("Enter IANA timezone: ");
+                std::io::stdout().flush()?;
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+                input.trim().to_string()
+            } else {
+                region_timezones[tz_idx].to_string()
+            }
+        }
+    };
+    
+    // Confirm
+    println!();
+    println!("Selected timezone: {}", selected_timezone);
+    print!("Confirm? [Y/n]: ");
+    std::io::stdout().flush()?;
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    if !input.trim().is_empty() && !input.trim().eq_ignore_ascii_case("y") {
+        println!("Cancelled.");
+        return Ok(());
+    }
+    
+    // Update config
+    config.timezone = Some(TimezoneConfig {
+        zone: Some(selected_timezone),
+        interactive: true,
+    });
+    
+    // Write back to file
+    let path_ref = Path::new(&config_path);
+    let extension = path_ref.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let content = if extension == "yaml" || extension == "yml" {
+        serde_yaml::to_string(&config)?
+    } else {
+        toml::to_string(&config)?
+    };
+    
+    fs::write(&config_path, content)?;
+    println!("Configuration updated: {}", config_path);
+    
+    Ok(())
 }
 
 fn main() {
@@ -194,6 +391,12 @@ fn main() {
                 }
             };
             clap_complete::generate(shell, &mut cmd, "cloudseed", &mut std::io::stdout());
+        }
+        Commands::Timezone { config } => {
+            match run_timezone_selector(config) {
+                Ok(()) => println!("Timezone updated successfully."),
+                Err(e) => eprintln!("Error: {}", e),
+            }
         }
     }
 }

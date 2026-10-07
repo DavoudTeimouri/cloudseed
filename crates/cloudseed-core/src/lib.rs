@@ -18,6 +18,19 @@ pub struct Config {
     /// Optional: custom variables for templating.
     #[serde(default)]
     pub variables: HashMap<String, String>,
+    /// Optional: timezone configuration.
+    #[serde(default)]
+    pub timezone: Option<TimezoneConfig>,
+}
+
+/// Timezone configuration for the VM.
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
+pub struct TimezoneConfig {
+    /// The IANA timezone identifier (e.g., "America/New_York", "Europe/London").
+    pub zone: Option<String>,
+    /// Whether the timezone was set interactively.
+    #[serde(default)]
+    pub interactive: bool,
 }
 
 impl Config {

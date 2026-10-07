@@ -39,6 +39,7 @@ impl TemplateEngine {
         r#"
 #cloud-config
 hostname: {{hostname}}
+timezone: {{timezone}}
 users:
   - name: ubuntu
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
