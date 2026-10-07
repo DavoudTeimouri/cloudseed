@@ -98,10 +98,11 @@ impl Config {
         // Collect keys that need to be fixed to avoid borrowing issues.
         let mut keys_to_fix = Vec::new();
         for (key, value) in &self.variables {
-            if key.to_lowercase().contains("pass") || key.to_lowercase().contains("password") {
-                if !value.starts_with('$') && !value.is_empty() {
-                    keys_to_fix.push(key.clone());
-                }
+            if (key.to_lowercase().contains("pass") || key.to_lowercase().contains("password"))
+                && !value.starts_with('$')
+                && !value.is_empty()
+            {
+                keys_to_fix.push(key.clone());
             }
         }
 
