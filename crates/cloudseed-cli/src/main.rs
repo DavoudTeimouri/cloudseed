@@ -2,11 +2,9 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use cloudseed_core::{Config, TimezoneConfig};
 use cloudseed_providers::get_provider;
-use serde_yaml;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use toml;
 use tracing::Level;
 
 // Common IANA timezone regions
