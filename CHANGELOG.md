@@ -5,6 +5,17 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.7] - 2026-10-07
+
+### Added
+- **Interactive timezone selector**: Hierarchical region→zone selection (10 IANA regions, 60 common timezones)
+- **TimezoneConfig**: New config section with `zone` (IANA identifier) and `interactive` flag
+- **CLI command**: `cloudseed timezone --config <file>` for interactive timezone configuration
+- **Template integration**: `timezone` field rendered in cloud-init user-data
+
+### Changed
+- Config supports `timezone` section in both YAML and TOML formats
+
 ## [2.1.6] - 2026-10-06
 
 ### Added

@@ -11,7 +11,7 @@ impl Provider for LocalProvider {
         // Prepare the data for the template as a JSON-serializable map.
         let mut data: HashMap<String, Value> = HashMap::new();
         data.insert("hostname".to_string(), json!(config.name));
-        
+
         // Add timezone if configured.
         if let Some(tz) = &config.timezone {
             if let Some(zone) = &tz.zone {

@@ -108,7 +108,8 @@ impl Config {
         // Now fix each key.
         for key in keys_to_fix {
             // Replace with a placeholder hash.
-            self.variables.insert(key, "$6$rounds=5000$examplesalt$".to_string());
+            self.variables
+                .insert(key, "$6$rounds=5000$examplesalt$".to_string());
         }
     }
 }

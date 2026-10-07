@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, CommandFactory};
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use cloudseed_core::{Config, TimezoneConfig};
 use cloudseed_providers::get_provider;
@@ -7,11 +7,20 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use toml;
-use tracing::{Level};
+use tracing::Level;
 
 // Common IANA timezone regions
 const TIMEZONE_REGIONS: &[&str] = &[
-    "Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic", "Australia", "Europe", "Indian", "Pacific",
+    "Africa",
+    "America",
+    "Antarctica",
+    "Arctic",
+    "Asia",
+    "Atlantic",
+    "Australia",
+    "Europe",
+    "Indian",
+    "Pacific",
 ];
 
 // Simplified IANA timezone database (common timezones)
@@ -129,11 +138,11 @@ enum Commands {
 fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
     // Load existing config
     let mut config = Config::from_file(&config_path)?;
-    
+
     println!("Timezone Configuration");
     println!("======================");
     println!();
-    
+
     // Show current timezone if set
     if let Some(tz) = &config.timezone {
         if let Some(zone) = &tz.zone {
@@ -145,7 +154,7 @@ fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
         println!("Current timezone: (not set)");
     }
     println!();
-    
+
     // Step 1: Select region
     println!("Step 1: Select region");
     println!("---------------------");
@@ -154,22 +163,25 @@ fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
     }
     println!("  {}. Custom IANA timezone", TIMEZONE_REGIONS.len() + 1);
     println!();
-    
+
     let region_idx = loop {
         print!("Select region [1-{}]: ", TIMEZONE_REGIONS.len() + 1);
         std::io::stdout().flush()?;
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
         let input = input.trim();
-        
+
         if let Ok(idx) = input.parse::<usize>() {
             if idx >= 1 && idx <= TIMEZONE_REGIONS.len() + 1 {
                 break idx - 1;
             }
         }
-        println!("Invalid selection. Please enter a number between 1 and {}.", TIMEZONE_REGIONS.len() + 1);
+        println!(
+            "Invalid selection. Please enter a number between 1 and {}.",
+            TIMEZONE_REGIONS.len() + 1
+        );
     };
-    
+
     let selected_timezone = if region_idx == TIMEZONE_REGIONS.len() {
         // Custom IANA timezone
         print!("Enter IANA timezone (e.g., America/New_York): ");
@@ -185,9 +197,12 @@ fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
             .filter(|tz| tz.starts_with(&format!("{}/", region)))
             .copied()
             .collect();
-        
+
         if region_timezones.is_empty() {
-            println!("No common timezones found for region {}. Using UTC.", region);
+            println!(
+                "No common timezones found for region {}. Using UTC.",
+                region
+            );
             "UTC".to_string()
         } else {
             println!();
@@ -198,22 +213,25 @@ fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
             }
             println!("  {}. Other...", region_timezones.len() + 1);
             println!();
-            
+
             let tz_idx = loop {
                 print!("Select timezone [1-{}]: ", region_timezones.len() + 1);
                 std::io::stdout().flush()?;
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input)?;
                 let input = input.trim();
-                
+
                 if let Ok(idx) = input.parse::<usize>() {
                     if idx >= 1 && idx <= region_timezones.len() + 1 {
                         break idx - 1;
                     }
                 }
-                println!("Invalid selection. Please enter a number between 1 and {}.", region_timezones.len() + 1);
+                println!(
+                    "Invalid selection. Please enter a number between 1 and {}.",
+                    region_timezones.len() + 1
+                );
             };
-            
+
             if tz_idx == region_timezones.len() {
                 // Other
                 print!("Enter IANA timezone: ");
@@ -226,7 +244,7 @@ fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
             }
         }
     };
-    
+
     // Confirm
     println!();
     println!("Selected timezone: {}", selected_timezone);
@@ -238,13 +256,13 @@ fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
         println!("Cancelled.");
         return Ok(());
     }
-    
+
     // Update config
     config.timezone = Some(TimezoneConfig {
         zone: Some(selected_timezone),
         interactive: true,
     });
-    
+
     // Write back to file
     let path_ref = Path::new(&config_path);
     let extension = path_ref.extension().and_then(|s| s.to_str()).unwrap_or("");
@@ -253,10 +271,10 @@ fn run_timezone_selector(config_path: String) -> anyhow::Result<()> {
     } else {
         toml::to_string(&config)?
     };
-    
+
     fs::write(&config_path, content)?;
     println!("Configuration updated: {}", config_path);
-    
+
     Ok(())
 }
 
@@ -286,41 +304,50 @@ fn main() {
     builder.init();
 
     match cli.command {
-        Commands::Generate { config, output, dry_run } => {
+        Commands::Generate {
+            config,
+            output,
+            dry_run,
+        } => {
             match Config::from_file(&config) {
                 Ok(config) => {
                     // Get the provider for the platform.
                     match get_provider(&config.platform) {
-                        Ok(provider) => {
-                            match config.generate_files(&*provider) {
-                                Ok(files) => {
-                                    if dry_run {
-                                        println!("Dry run: would generate the following files:");
-                                        for (path, _) in &files {
-                                            println!("  {}", path);
+                        Ok(provider) => match config.generate_files(&*provider) {
+                            Ok(files) => {
+                                if dry_run {
+                                    println!("Dry run: would generate the following files:");
+                                    for (path, _) in &files {
+                                        println!("  {}", path);
+                                    }
+                                } else {
+                                    let output_dir = output.unwrap_or_else(|| ".".to_string());
+                                    for (path, content) in files {
+                                        let full_path = Path::new(&output_dir).join(path);
+                                        if let Some(parent) = full_path.parent() {
+                                            let _ = fs::create_dir_all(parent);
                                         }
-                                    } else {
-                                        let output_dir = output.unwrap_or_else(|| ".".to_string());
-                                        for (path, content) in files {
-                                            let full_path = Path::new(&output_dir).join(path);
-                                            if let Some(parent) = full_path.parent() {
-                                                let _ = fs::create_dir_all(parent);
-                                            }
-                                            if let Err(e) = fs::write(&full_path, content) {
-                                                eprintln!("Failed to write file {}: {}", full_path.display(), e);
-                                            } else {
-                                                println!("Generated: {}", full_path.display());
-                                            }
+                                        if let Err(e) = fs::write(&full_path, content) {
+                                            eprintln!(
+                                                "Failed to write file {}: {}",
+                                                full_path.display(),
+                                                e
+                                            );
+                                        } else {
+                                            println!("Generated: {}", full_path.display());
                                         }
                                     }
                                 }
-                                Err(e) => {
-                                    eprintln!("Failed to generate files: {}", e);
-                                }
                             }
-                        }
+                            Err(e) => {
+                                eprintln!("Failed to generate files: {}", e);
+                            }
+                        },
                         Err(e) => {
-                            eprintln!("Failed to get provider for platform {}: {}", config.platform, e);
+                            eprintln!(
+                                "Failed to get provider for platform {}: {}",
+                                config.platform, e
+                            );
                         }
                     }
                 }
@@ -345,12 +372,16 @@ fn main() {
                             config.fix_it();
                             // Determine the file extension to decide between YAML and TOML.
                             let path_ref = Path::new(&path);
-                            let extension = path_ref.extension().and_then(|s| s.to_str()).unwrap_or("");
+                            let extension =
+                                path_ref.extension().and_then(|s| s.to_str()).unwrap_or("");
                             let fixed_content = if extension == "yaml" || extension == "yml" {
                                 match serde_yaml::to_string(&config) {
                                     Ok(s) => s,
                                     Err(e) => {
-                                        eprintln!("Failed to serialize fixed config to YAML: {}", e);
+                                        eprintln!(
+                                            "Failed to serialize fixed config to YAML: {}",
+                                            e
+                                        );
                                         return;
                                     }
                                 }
@@ -359,7 +390,10 @@ fn main() {
                                 match toml::to_string(&config) {
                                     Ok(s) => s,
                                     Err(e) => {
-                                        eprintln!("Failed to serialize fixed config to TOML: {}", e);
+                                        eprintln!(
+                                            "Failed to serialize fixed config to TOML: {}",
+                                            e
+                                        );
                                         return;
                                     }
                                 }
@@ -392,11 +426,9 @@ fn main() {
             };
             clap_complete::generate(shell, &mut cmd, "cloudseed", &mut std::io::stdout());
         }
-        Commands::Timezone { config } => {
-            match run_timezone_selector(config) {
-                Ok(()) => println!("Timezone updated successfully."),
-                Err(e) => eprintln!("Error: {}", e),
-            }
-        }
+        Commands::Timezone { config } => match run_timezone_selector(config) {
+            Ok(()) => println!("Timezone updated successfully."),
+            Err(e) => eprintln!("Error: {}", e),
+        },
     }
 }

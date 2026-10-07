@@ -25,7 +25,8 @@ impl TemplateEngine {
     pub fn load_template<S: Into<String>>(&mut self, name: S, template: S) -> anyhow::Result<()> {
         let name_str = name.into();
         let template_str = template.into();
-        self.reg.register_template_string(name_str.as_str(), template_str.as_str())?;
+        self.reg
+            .register_template_string(name_str.as_str(), template_str.as_str())?;
         Ok(())
     }
 
