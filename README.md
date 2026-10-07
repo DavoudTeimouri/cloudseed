@@ -122,6 +122,13 @@ timezone: "UTC"
 locale: "en_US.UTF-8"
 keyboard_layout: "us"
 
+### Interactive timezone selection
+
+```bash
+# Interactive timezone configuration (region -> zone hierarchy)
+cloudseed timezone --config config.yaml
+```
+
 # Disk
 grow_device: "/dev/sda"
 grow_partition: "1"
