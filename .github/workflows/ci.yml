@@ -73,6 +73,7 @@ jobs:
           else
             ./target/release/cloudseed-cli --help
           fi
+        shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
