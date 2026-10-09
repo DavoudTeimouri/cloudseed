@@ -891,6 +891,7 @@ fn validate_form(panel: Panel, fields: &[Field]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::backend::TestBackend;
 
     fn field(label: &'static str, value: &str) -> Field {
         Field {
@@ -1040,5 +1041,123 @@ mod tests {
         assert!(!app.on_key(KeyCode::Char('q')));
         // 'q' is typed into the field instead.
         assert_eq!(app.fields[0].value, "q");
+    }
+
+    /// Render `app` into a fixed-size buffer and return it as plain text.
+    ///
+    /// Exercises the real draw path, so a layout panic or a missing widget
+    /// fails here instead of only on a terminal.
+    fn paint(app: &mut App, width: u16, height: u16) -> String {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal");
+        terminal.draw(|f| app.draw(f)).expect("draw frame");
+        let buf = terminal.backend().buffer().clone();
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf.get(x, y).symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn menu_bar_frame_shows_every_entry_and_the_status_hints() {
+        let mut app = App::new(None);
+        let text = paint(&mut app, 100, 24);
+
+        for entry in MENU {
+            assert!(text.contains(entry), "menu bar missing {:?}", entry);
+        }
+        assert!(text.contains("Commands"), "command list border missing");
+        assert!(text.contains("←/→ menu"), "status hints missing");
+    }
+
+    #[test]
+    fn generate_form_renders_labels_and_values() {
+        let mut app = App::new(Some("cloudseed.yaml".to_string()));
+        app.open_menu(); // menu_index 0 = Generate
+        app.screen = Screen::Form;
+
+        let text = paint(&mut app, 100, 24);
+        assert!(text.contains("Generate"), "panel title missing");
+        assert!(text.contains("Config"), "config field missing");
+        assert!(text.contains("cloudseed.yaml"), "pre-filled path missing");
+        assert!(text.contains("Dry run"), "dry-run field missing");
+    }
+
+    #[test]
+    fn timezone_frame_renders_both_columns() {
+        let mut app = App::new(None);
+        app.menu_index = 3; // Timezone
+        app.open_menu();
+
+        let text = paint(&mut app, 100, 24);
+        assert!(text.contains("Region"), "region column missing");
+        assert!(text.contains("City"), "city column missing");
+        // The default region is Africa, so its cities must be listed.
+        assert!(text.contains("Africa/Cairo"), "Africa cities missing");
+        assert!(text.contains("Custom"), "custom entry missing");
+    }
+
+    #[test]
+    fn timezone_frame_switches_to_the_free_form_entry() {
+        let mut app = App::new(None);
+        app.menu_index = 3;
+        app.open_menu();
+        // Walk to the trailing "Custom…" entry.
+        for _ in 0..TIMEZONE_REGIONS.len() {
+            app.on_key(KeyCode::Down);
+        }
+        app.on_key(KeyCode::Char('U'));
+
+        let text = paint(&mut app, 100, 24);
+        assert!(text.contains("IANA timezone"), "custom input missing");
+        assert!(text.contains('U'), "typed character not shown");
+        // The city column is replaced, so it must be gone.
+        assert!(!text.contains("City"), "city column should be hidden");
+    }
+
+    #[test]
+    fn output_frame_renders_and_marks_failure() {
+        let mut app = App::new(None);
+        app.screen = Screen::Output;
+        app.output = "Generate: cloudseed.yaml\n\nfailed to load x".to_string();
+        app.output_error = true;
+
+        let text = paint(&mut app, 100, 24);
+        assert!(text.contains("Output (failed)"), "failure title missing");
+        assert!(text.contains("failed to load x"), "message missing");
+    }
+
+    #[test]
+    fn validation_error_renders_under_the_field() {
+        let mut app = App::new(None);
+        app.screen = Screen::Form;
+        app.panel = Panel::Completion;
+        app.fields = vec![Field {
+            label: "Shell",
+            value: "tcsh".to_string(),
+            error: Some("unsupported shell: tcsh".to_string()),
+        }];
+
+        let text = paint(&mut app, 100, 24);
+        assert!(text.contains("tcsh"), "value missing");
+        assert!(
+            text.contains("unsupported shell: tcsh"),
+            "error message missing:\n{}",
+            text
+        );
+    }
+
+    #[test]
+    fn frame_renders_at_a_small_terminal_size() {
+        // 20x8 is below the layout's comfortable size; it must not panic.
+        let mut app = App::new(Some("cloudseed.yaml".to_string()));
+        app.open_menu();
+        app.screen = Screen::Form;
+        let text = paint(&mut app, 20, 8);
+        assert!(text.contains("Generate"));
     }
 }

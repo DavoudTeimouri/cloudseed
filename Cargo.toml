@@ -9,7 +9,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2.1.6"
+version = "2.1.8"
 edition = "2021"
 license = "MIT"
 description = "CloudSeed - Generate cloud-init / Cloudbase-Init VM templates for vSphere, KVM, and Physical (Linux + Windows)."

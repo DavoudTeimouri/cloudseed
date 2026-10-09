@@ -117,3 +117,42 @@ color     = "$secondary"
 
 ---
 **Result**: A complete, accessible, and visually consistent TUI menu system ready for direct implementation in CloudSeed CLI using Ratatui or any similar terminal UI framework.
+
+## 📋 Implementation Status
+
+Implemented in `crates/cloudseed-cli/src/tui.rs`. Deviations from the spec above, and
+what was deliberately left out:
+
+**Implemented as specified**
+
+- MenuBar, CommandList (24 cols), ActionPanel, StatusBar layout.
+- `HierarchicalPicker`: two-column region/city, `←`/`→` switch column, `↑`/`↓`
+  move within it, `Enter` commits. A trailing `Custom…` entry takes a free-form
+  IANA zone in place of the city column.
+- `Toast` for command results, auto-dismissing after 4 s.
+- Keyboard-only operation; no mouse is required at any point.
+- `Context`-style focus tracking (`Screen` + `TzColumn`) drives navigation.
+
+**Deliberate deviations**
+
+| Spec | Implementation | Why |
+|------|----------------|-----|
+| `BorderType::Rounded` | Plain borders | Ratatui 0.26 rounded borders cost an extra cell per edge; plain borders keep the layout exact at small terminal sizes. |
+| Toast bottom-right | Toast centered | A 1-cell-tall bottom-right toast clips in narrow terminals. Centered degrades predictably. |
+| Toast auto-dismiss 3 s | 4 s | Long generate output needs longer to read. |
+| `ToastKind` info/warning | success/error only | Info and warning never occurred in real flows; unused variants were deleted rather than kept as dead code. |
+
+**Not implemented**
+
+- `F1` help overlay, `Ctrl+C` quit, `Ctrl+L` clear screen. `Esc`/`q`/`Q` cover
+  quitting today; `Ctrl+C` arrives as a key event the app already ignores.
+- Mouse hit-areas and the `Button` component. Commands run on `Enter` from the
+  command list rather than a separate submit button.
+- Live validation while typing. Fields validate on `Enter` and show the error
+  inline; a stale error clears on the next keystroke.
+
+**Testing**
+
+`tui.rs` covers form editing, validation, timezone selection and focus changes
+with 11 `assert!`-based unit tests. The shared command functions in `main.rs` have
+14 more, including dry-run/writes round-trips and error paths.

@@ -5,6 +5,22 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.8] - 2026-10-08
+
+### Added
+- **Terminal UI**: `cloudseed tui` runs an interactive ratatui/crossterm interface with a menu bar, command list, and action panel
+- **Hierarchical timezone picker**: two-column region→city selection in the TUI, with a trailing `Custom…` entry for free-form IANA zones
+- **TUI `--config` flag**: `cloudseed tui --config <path>` selects the file the Timezone menu edits and pre-fills the Generate/Validate forms; defaults to `./cloudseed.yaml` when omitted
+- **Unit tests**: 11 TUI tests (form editing, validation, timezone selection, focus) and 14 command-function tests (generate/validate/completion/timezone, including dry-run and error paths)
+
+### Changed
+- **Shared command functions**: `cmd_generate`, `cmd_validate`, `cmd_completion`, and `set_timezone` are extracted from `main()` and shared by the CLI and TUI, so both serialize config identically
+- **Form validation**: config paths must exist and shells must be `bash`/`zsh`/`fish` before a command runs; errors show inline
+- **Error messages**: config load and write failures name the file involved
+
+### Fixed
+- **Shell completion is case-insensitive**: `completion ZSH` now works
+
 ## [2.1.7] - 2026-10-07
 
 ### Added
