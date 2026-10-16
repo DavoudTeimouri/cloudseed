@@ -45,28 +45,30 @@ cargo build --release
 Requires Rust 1.75+ (`rustup install stable`).
 
 ## Usage
-
+|
 **Subcommand-based CLI** (batch-only, designed for automation/CI/CD):
-
+|
 ```bash
 # Generate configuration from YAML/TOML config
 cloudseed generate --config config.yaml --output ./out
-
+|
 # Dry-run: preview generated files without writing
 cloudseed generate --config config.yaml --dry-run
-
+|
 # Validate configuration (checks for common issues)
 cloudseed validate --config config.yaml
-
+|
 # Validate and auto-fix (e.g., plaintext password → hash)
 cloudseed validate --config config.yaml --fix-it
-
+|
 # Generate shell completions
 cloudseed completion bash > /etc/bash_completion.d/cloudseed
 cloudseed completion zsh > ~/.zsh/completions/_cloudseed
 cloudseed completion fish > ~/.config/fish/completions/cloudseed.fish
 cloudseed completion powershell > cloudseed.ps1
 cloudseed completion elvish > ~/.config/elvish/lib/cloudseed.elv
+# Launch interactive Terminal User Interface (TUI)
+cloudseed tui --config config.yaml   # defaults to ./cloudseed.yaml if omitted
 ```
 
 ### Configuration file (YAML/TOML)
