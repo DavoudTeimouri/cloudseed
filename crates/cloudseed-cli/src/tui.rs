@@ -12,7 +12,9 @@
 //!   Enter picks the zone, Esc returns
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    },
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -27,14 +29,12 @@ use std::{
 };
 
 use super::{
-    cmd_completion, cmd_generate, cmd_validate, set_timezone, COMMON_TIMEZONES, TIMEZONE_REGIONS,
+    cmd_completion, cmd_generate, cmd_validate, set_timezone, COMMON_TIMEZONES, SHELLS,
+    TIMEZONE_REGIONS,
 };
 
 /// How long a toast stays on screen.
 const TOAST_TTL: Duration = Duration::from_secs(4);
-
-/// Shells the completion command accepts.
-const SHELLS: &[&str] = &["bash", "zsh", "fish"];
 
 /// Menu bar entries, in order.
 const MENU: &[&str] = &["Generate", "Validate", "Completion", "Timezone"];
@@ -191,7 +191,16 @@ impl App {
             let timeout = tick.checked_sub(last.elapsed()).unwrap_or_default();
             if event::poll(timeout)? {
                 if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press && self.on_key(key.code) {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    // Ctrl+C quits from any screen.
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && matches!(key.code, KeyCode::Char('c'))
+                    {
+                        break;
+                    }
+                    if self.on_key(key.code) {
                         break;
                     }
                 }

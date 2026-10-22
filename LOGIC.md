@@ -1,6 +1,6 @@
 # CloudSeed CLI – Logic and Architecture Overview
 
-This document describes the internal logic, data flow, and key design decisions of the CloudSeed CLI project. It is intended to be kept up‑to‑date as the software evolves.
+This document describes the internal logic, data flow, and key design decisions of the CloudSeed CLI project. It is kept up-to-date as the software evolves.
 
 ## Table of Contents
 - [Project Overview](#project-overview)
@@ -17,14 +17,15 @@ This document describes the internal logic, data flow, and key design decisions 
 
 ---  
 ## Project Overview
-CloudSeed CLI is a Rust‑based command‑line tool that generates cloud‑init configuration files (user‑data, meta‑data, etc.) from a declarative YAML/TOML configuration. It supports multiple platforms (local, AWS, Azure, GCP) via a pluggable provider system, and features an interactive TUI for novice users.
+CloudSeed CLI is a Rust command-line tool that generates **cloud-init** (Linux) and **Cloudbase-Init + Sysprep** (Windows) configuration files for VM template provisioning on **VMware vSphere**, **KVM**, and **Physical/Other** platforms.
 
-The project consists of five main crates in a Cargo workspace:
-- `cloudseed-cli` – CLI parsing, command dispatch, TUI, and shared helpers.
-- `cloudseed-core` – Configuration model, validation, fix‑it logic, and file generation orchestration.
-- `cloudseed-providers` – Platform‑specific implementations (Local, AWS, Azure, GCP) that implement the `Provider` trait.
-- `cloudseed-templates` – Handlebars‑based templates used to render cloud‑init snippets.
-- `cloudseed-testutils` – Shared test utilities and fixtures.
+The project is a Cargo workspace with four crates:
+- `cloudseed-cli` – CLI parsing, command dispatch, TUI, and the shared command functions.
+- `cloudseed-core` – Configuration model, validation, fix-it logic, and the `Provider` trait.
+- `cloudseed-providers` – Platform/OS-specific file generation.
+- `cloudseed-templates` – Rendering of the generated documents.
+
+**Config-only**: CloudSeed emits configuration files, not an ISO. You apply the config directly (guestinfo/vApp on vSphere, `--cloud-init` on KVM, or drop-in on the golden image). See [GUIDE.md](GUIDE.md).
 
 ---  
 ## High‑Level Architecture
@@ -39,110 +40,172 @@ The project consists of five main crates in a Cargo workspace:
 +---------------------+       +---------------------+
 |  Core (cloudseed-core)            |
 |  - Config struct                  |
-|  - Validation & fix‑it            |
+|  - Validation & fix-it            |
 |  - Provider trait                 |
-|  - File generation orchestrator   |
 +---------------------+       +---------------------+
            |                         |
            v                         v
 +---------------------+       +---------------------+
 |  Providers          |       |  Templates          |
-|  (Local, AWS, …)    |       |  Handlebars files   |
+|  (vsphere/kvm/      |       |  cloud-config,      |
+|   physical)         |       |  Sysprep, Conf      |
 +---------------------+       +---------------------+
 ```
 
-- The CLI parses subcommands (`generate`, `validate`, `completion`, `timezone`, `tui`) and delegates to functions in `cloudseed-core`.
-- The TUI re‑uses the same core functions (`cmd_generate`, `cmd_validate`, `cmd_completion`, `set_timezone`) so CLI and TUI behave identically.
-- Providers implement the `Provider` trait (`generate_files`) to return a list of `(path, content)` pairs.
-- Templates are Handlebars files rendered with the `Config` as context.
+- The CLI parses subcommands and delegates to functions in `main.rs`.
+- The TUI re-uses the same command functions (`cmd_generate`, `cmd_validate`, `cmd_completion`, `set_timezone`), so CLI and TUI cannot drift.
+- The provider decides *which* files to write for a platform/OS pair.
+- The templates crate decides *what* each file contains.
 
 ---  
 ## Core Modules
 
 ### `cloudseed_core::Config`
-The central data structure:
-```rust
-pub struct Config {
-    pub version: String,          // config schema version
-    pub name: String,             // project/deployment name
-    pub platform: String,         // target platform (local, aws, azure, gcp)
-    pub modules: Vec<String>,     // optional list of enabled modules
-    pub variables: HashMap<String, String>, // custom template variables
-    pub timezone: Option<TimezoneConfig>,
-}
+The central data structure. It models the fields documented in `README.md`:
+
+| Group | Fields |
+|-------|--------|
+| Identity | `version`, `name`, `platform`, `os_type`, `modules`, `variables` |
+| Hostname | `hostname`, `hostname_prefix`, `use_platform_hostname` |
+| User | `username`, `password`, `plaintext_password`, `password_rounds`, `sudo`, `lock_password`, `ssh_pwauth`, `disable_root`, `ssh_keys` |
+| Network | `net_mode`, `net_interface`, `net_address`, `net_netmask`, `net_gateway`, `net_dns`, `net_search`, `net_domain`, `let_platform_handle_network` |
+| Packages | `package_upgrade`, `packages` |
+| Locale | `timezone`, `locale`, `keyboard_layout` |
+| Disk | `grow_device`, `grow_partition` |
+| NTP | `ntp_servers`, `let_platform_handle_ntp` |
+| Files & commands | `write_files`, `bootcmd`, `firstboot`, `final_message` |
+| Sysprep (Windows) | `sysprep`, `sysprep_organization`, `sysprep_owner`, `sysprep_computer_prefix`, `sysprep_timezone`, `sysprep_locale`, `sysprep_product_key` |
+| vSphere | `export_vsphere_spec`, `vsphere_spec_name`, `vsphere_pre_script`, `vsphere_post_script`, `use_sample_scripts` |
+
+Every optional field carries a `serde` default, so a minimal config (`version`, `name`, `platform`) still loads and generates a complete cloud-config.
+
+`timezone` accepts either form:
+```yaml
+timezone: "Europe/Berlin"
+# or
+timezone:
+  zone: Europe/Berlin
+  interactive: true
 ```
-`TimezoneConfig` holds an optional IANA zone (`zone: Option<String>`) and an `interactive: bool` flag.
+
+### Module resolution (`Config::module_enabled`)
+An empty `modules` list means every module is enabled. When the list is non-empty, only the listed modules are emitted.
+
+A `platform_*` module and its cloud-init counterpart are mutually exclusive:
+- `use_platform_hostname: true` → the `hostname` module is **not** emitted.
+- `let_platform_handle_network: true` → the `network` module is **not** emitted.
+- `let_platform_handle_ntp: true` → the `ntp` module is **not** emitted.
+
+`template_best_practices` is the one opt-in module: it produces an extra
+artifact (the golden-image cleanup script), so it stays off unless it is listed
+explicitly.
+
+This keeps cloud-init from fighting the hypervisor over the same concern.
 
 ### Validation (`Config::validate`)
-Returns a `Vec<ValidationIssue>` where each issue contains:
-- `field`: the name of the field that failed validation
-- `message`: human‑readable description
+Returns `Vec<ValidationIssue>`, each with a `field` and a `message`. Checks:
+- `version`, `name`, `platform` are present.
+- `platform` is one of `vsphere`, `kvm`, `physical`.
+- `os_type` is one of `linux`, `windows`.
+- Every entry in `modules` is a known module.
+- A password that is neither empty, a crypt hash, nor explicitly plaintext is reported.
+- `lock_password` without any `ssh_keys` is reported (locks the operator out).
+- Static networking without an address or a gateway is reported.
+- A Windows target without `sysprep` is reported (cloned VMs would share a SID).
 
-Validation rules:
-- `version`, `name`, `platform` must be non‑empty.
-- No further semantic rules; providers may add their own checks via the `generate_files` step.
+### Fix-It (`Config::fix_it`)
+Hashes a plaintext password with **SHA-512 crypt** (`$6$`) using a random salt, via the `sha-crypt` crate. The rounds come from `password_rounds` (default 5000). A password that is already a crypt hash is left alone, and `plaintext_password: true` is never touched.
 
-### Fix‑It (`Config::fix_it`)
-Currently only detects and hashes plaintext passwords:
-- Any variable key containing “pass” or “password” whose value does **not** start with `$` is assumed to be a plaintext password.
-- The value is replaced with its SHA‑256 hash prefixed with `$sha256$`.
+The result is a real hash the target system can verify — not a placeholder.
 
-### File Generation (`Config::generate_files`)
-1. Obtain a `Box<dyn Provider>` via `cloudseed_providers::get_provider(&config.platform)`.
-2. Call `provider.generate(&config)` → returns `Vec<(String, String)>`.
-   - The `String` key is the relative file path (e.g., `user-data.yaml`).
-   - The `String` value is the rendered file content.
-
-### Provider Trait (`cloudseed_providers::Provider`)
+### Provider Trait (`cloudseed_core::Provider`)
 ```rust
-pub trait Provider: Send + Sync {
+pub trait Provider {
     fn generate(&self, config: &Config) -> anyhow::Result<Vec<(String, String)>>;
 }
 ```
-Implementations:
-- `LocalProvider` – renders templates using the local filesystem (no network calls).
-- `AwsProvider`, `AzureProvider`, `GcpProvider` – stubbed or placeholder; they return the same templates as Local for now (the abstraction is ready for real API calls).
-
-### Template Engine (`cloudseed-templates`)
-- Uses the [Handlebars](https://handlebarsjs.com/) crate.
-- Templates are stored as `*.hbs` files under `cloudseed-templates/templates/`.
-- Rendering context is the `Config` serialized to a `Handlebars`‐compatible JSON map (via `serde_json::to_value`).
-- Supported helpers: `json`, `default`, `uppercase`, `lowercase`, `trim`, `replace`, etc.
-
----  
-## CLI Entry Point and Command Flow
-
-`src/main.rs`:
-1. `Cli::parse()` builds the argument parser (via `clap`).
-2. Match on `Cli::command`:
-   - `Generate { config, output, dry_run }` → `cmd_generate(&config, output.as_deref(), dry_run)`
-   - `Validate { path, fix_it }` → `cmd_validate(&path, fix_it)`
-   - `Completion { shell }` → `cmd_completion(&shell)`
-   - `Timezone { config }` → `run_timezone_selector(config)`
-   - `Tui { config }` → `App::new(config).run()`
-3. `report(result)` prints `Ok` to stdout or `Err` to stderr.
-
-### Shared Command Functions
-All live in `main.rs` (above `main`):
-- `cmd_generate` – loads config, gets provider, calls `generate_files`, formats dry‑run or writes files.
-- `cmd_validate` – loads config, calls `validate()`, optionally calls `fix_it()` and rewrites the file.
-- `cmd_completion` – maps shell string to `clap_complete::Shell` and invokes `clap_complete::generate`.
-- `set_timezone` – loads config, updates `config.timezone`, writes back using the same YAML/TOML detection logic as the config loader.
-
-These functions are **exactly** the same ones the TUI calls via `App::submit_form()`, guaranteeing identical behavior between CLI and TUI.
-
-### Error Handling
-Each function returns `anyhow::Result<String>` where the `Ok` string is the user‑facing output (to be printed to stdout) and the `Err` contains an error message (printed to stderr). The `report` helper centralises this printing.
+`generate_files` on `Config` is a thin wrapper over it.
 
 ---  
 ## Configuration Handling
 - Supported formats: YAML (`.yaml`, `.yml`) and TOML (`.toml`).
-- Loader (`Config::from_file`) tries YAML first; if parsing fails it falls back to TOML.
-- Writer chooses format based on file extension (`.yaml`/`.yml` → YAML, else → TOML).
-- The TUI always writes using the same detection logic, guaranteeing round‑trip compatibility.
+- **The file extension decides the format.** There is no format guessing: a TOML file named `.yaml` is a parse error, and a malformed file reports which format it tried. An unknown extension is rejected.
+- `Config::serialize(path)` writes back in the format matching the path's extension, so a round-trip preserves the file type.
 
-### Default Config Path
-When the TUI is launched without `--config`, it defaults to `./cloudseed.yaml` (relative to the current working directory). All path fields in the forms are pre‑filled with this value, making the TUI usable out‑of‑the‑box.
+---  
+## Provider Abstraction
+
+`cloudseed-providers` contains one provider, `PlatformProvider`, parameterised by platform and OS:
+
+```rust
+PlatformProvider::new("vsphere", "linux")
+```
+
+`get_provider(platform, os_type)` validates both against `cloudseed_core::PLATFORMS` and `cloudseed_core::OS_TYPES` and returns the provider. An unknown value is an error that names the accepted values.
+
+### Output layout
+Files are written under `out/<platform>-<os>/`:
+
+| File | Linux | Windows |
+|------|:-----:|:-------:|
+| `user-data` | ✅ | ✅ |
+| `meta-data` | ✅ | ❌ |
+| `cloudbase-init.conf` | ❌ | ✅ |
+| `cloudbase-init-unattend.conf` | ❌ | ✅ |
+| `sysprep-unattend.xml` | ❌ | ✅ (when `sysprep`) |
+| `run-sysprep.bat` | ❌ | ✅ (when `sysprep`) |
+| `vsphere-customization-spec.xml` | ✅ (when `export_vsphere_spec`) | ✅ (when `export_vsphere_spec`) |
+| `vsphere-pre-script.sh`, `vsphere-post-script.sh` | ✅ (vSphere) | ✅ (vSphere) |
+| `cloudseed.yaml` | ✅ | ✅ |
+| `README.txt` | ✅ | ✅ |
+
+`README.txt` lists the apply steps for the target and repeats any validation warnings.
+
+---  
+## Template Rendering
+
+`cloudseed-templates` builds each document:
+
+- **`user_data`** — the Linux cloud-config. It is built as typed values and serialized with `serde_yaml`, so quoting, block scalars and escaping are handled by the serializer rather than by hand. Only the enabled modules appear.
+- **`meta_data`** — instance identity (`instance-id`, `local-hostname`).
+- **`cloudbase_init`** / **`cloudbase_init_unattend`** — Cloudbase-Init service configuration.
+- **`sysprep_unattend`** — the Windows unattend answer file with the generalize, specialize and oobeSystem passes.
+- **`run_sysprep`** — the batch script that runs Sysprep generalize.
+- **`vsphere_customization_spec`** — the vSphere Guest Customization Specification XML.
+
+Static networking is emitted as cloud-init network config **version 2**. The dotted netmask is converted to a prefix length (`255.255.255.0` → `/24`) because v2 uses `address/prefix`.
+
+---  
+## CLI Entry Point and Command Flow
+
+`main.rs`:
+1. `Cli::parse()` builds the argument parser (via `clap`).
+2. Logging is initialised from `--verbose` / `--quiet` / `--json-logs`.
+3. The subcommand is dispatched to a function returning `anyhow::Result<String>`.
+4. `report(result)` prints the `Ok` text to stdout or the `Err` to stderr and **returns the process exit code** — `0` on success, `1` on failure. CI can therefore branch on the result.
+
+### Commands
+| Command | Function | Notes |
+|---------|----------|-------|
+| `generate` | `cmd_generate` | `--dry-run` lists the files without writing |
+| `validate` | `cmd_validate` | Accepts a file or a directory of configs |
+| `completion` | `cmd_completion` | Case-insensitive; bash, zsh, fish, powershell, elvish |
+| `timezone` | `run_timezone_selector` | Interactive region → city picker |
+| `tui` | `tui::App::new(config).run()` | `--config` defaults to `./cloudseed.yaml` |
+| `detect-cloud-init` | `cmd_detect_cloud_init` | Runs `cloud-init --version` and reports support |
+| `write-to-cloud-init-path` | `cmd_write_to_cloud_init_path` | Writes to `/etc/cloud/cloud.cfg.d/99-cloudseed.cfg` |
+
+### Shared Command Functions
+All live in `main.rs`:
+- `cmd_generate` – loads the config, gets a provider, generates the files, then either lists them (dry run) or writes them.
+- `cmd_validate` – loads the config, validates it, and optionally applies `fix_it` and writes the file back.
+- `cmd_completion` – maps a shell name to `clap_complete::Shell` and emits the script.
+- `set_timezone` – loads the config, sets `timezone`, writes it back in the original format.
+
+These are exactly the functions the TUI calls, so both surfaces behave identically.
+
+### Error Handling
+Each function returns `anyhow::Result<String>`. The `Ok` string is the user-facing output; the `Err` carries the message. `report` centralises printing and the exit code.
 
 ---  
 ## Terminal User Interface (TUI)
@@ -151,87 +214,50 @@ Built with `ratatui` 0.26 and `crossterm` 0.28.
 
 ### Screens
 - `Screen::MenuBar` – top row, lists `[Generate, Validate, Completion, Timezone]`.
-- `Screen::CommandList` – left panel, vertical list of actions for the selected menu (usually a single entry like “Run generate”).
-- `Screen::Form` – right panel, shows input fields for the selected command.
-- `Screen::Timezone` – two‑column picker (region | city) plus a free‑form IANA entry accessible via the trailing “Custom…” region.
-- `Screen::Output` – modal‑like pane that shows the result of the last command (stdout/stderr) with a green/red border.
+- `Screen::CommandList` – left panel, the actions for the selected menu.
+- `Screen::Form` – right panel, the input fields for the selected command.
+- `Screen::Timezone` – two-column region/city picker with a trailing `Custom…` entry.
+- `Screen::Output` – pane showing the result of the last command.
 
 ### Navigation
-- **MenuBar**: `←`/`→` to move focus, `Enter` opens the selected menu.
-- **CommandList**: `↑`/`↓` to move highlight, `Enter` runs the command, `Esc` returns to MenuBar.
-- **Form**: `↑`/`↓` to move between fields, typing edits the focused field, `Enter` submits (after validation), `Esc` returns to MenuBar.
-- **Timezone**: `↑`/`↓` moves within the focused column, `←`/`→` switches between region and city columns, `Enter` confirms the selected zone and writes it to the config file, `Esc` returns to the CommandList.
-- **Output**: any key returns to the previous screen; `q` from the MenuBar quits the application.
+- **MenuBar**: `←`/`→` to move, `Enter` opens, `q`/`Q`/`Esc` quits.
+- **CommandList**: `↑`/`↓` to move, `Enter` runs, `Esc` returns.
+- **Form**: `↑`/`↓` to move between fields, typing edits, `Enter` submits, `Esc` returns.
+- **Timezone**: `↑`/`↓` within a column, `←`/`→` between columns, `Enter` commits, `Esc` returns.
+- **`Ctrl+C` quits from any screen.**
 
 ### Validation on Submit
-When the user presses Enter in a form:
-1. `validate_form(panel, &fields)` is called.
-2. If it returns `Some(err)`, the error is placed under the offending field (`field.error = Some(err)`) and submission is aborted.
-3. Otherwise the appropriate `cmd_*` function is invoked.
-4. The resulting `Ok(text)` or `Err(e)` is stored in `app.output` (with a flag for error) and the screen switches to `Screen::Output`.
-5. The output pane shows a header like `Generate: cloudseed.yaml` followed by the command’s stdout or stderr.
+`validate_form` checks the form before the command runs: a config path must exist, and a shell must be one of the supported ones. A failure is shown under the offending field and the command does not run.
 
 ### Toasts
-Short-lived messages appear in the bottom‑right corner:
-- `ToastKind::Success` (green) for successful operations.
-- `ToastKind::Error` (red) for failures.
-They automatically fade after 4 seconds or can be dismissed with any key press.
-
-### Rendering Loop
-- Fixed tick rate of 200 ms (`Duration::from_millis(200)`).
-- On each tick, `app.expire_toast()` removes stale toasts.
-- The UI is drawn via `ratatui::Terminal::draw`.
+`ToastKind::Success` (green) and `ToastKind::Error` (red) appear in the bottom-right corner and expire after 4 seconds.
 
 ### Testability
-All UI logic is unit‑testable:
-- `App::paint(&mut app, width, height)` renders the app into a `TestBackend` buffer and returns the plain text.
-- Tests assert on the presence of specific strings (titles, field labels, values, error messages, status hints, etc.).
-- This approach avoids depending on a real terminal while still exercising the exact same draw functions used at runtime.
-
----  
-## Validation and Fix‑It
-As described above, validation is field‑based and returns a collection of issues. The fix‑it step is limited to password hashing but is extensible—new rules can be added to `Config::fix_it` and will be automatically applied when the user runs `cloudseed validate --fix-it <path>` or submits the Validate form in the TUI.
+`paint(app, width, height)` renders the app into a `ratatui::backend::TestBackend` buffer and returns the plain text, so the render path is asserted in tests without a real terminal.
 
 ---  
 ## Testing Strategy
 ### Unit Tests
-- Located in `src/main.rs` and `src/tui.rs` under `#[cfg(test)] mod tests`.
-- Use standard library `assert!` and `expect()`/`expect_err()`.
-- No external test crate is required; this keeps the test suite lightweight and fast.
-- Tests cover:
-  - Form editing (insert, backspace).
-  - Validation error clearing on edit.
-  - Completion shell acceptance/rejection (case‑insensitive).
-  - Config loading (missing file, empty path).
-  - Generate dry‑run vs actual write.
-  - `set_timezone` read/write error paths.
-  - TUI rendering (menu bar, forms, timezone picker, output pane, validation errors).
-  - Focus navigation and screen transitions.
+- `crates/cloudseed-cli/src/main.rs` – 21 tests over the command functions: dry run leaves the output directory untouched, the documented output layout is produced, an unknown platform is rejected, a missing file names the path, `--fix-it` replaces a plaintext password with a `$6$` hash and leaves an existing hash alone, a directory of configs is validated, every supported shell is accepted, a field whose module is disabled is reported, the `template_best_practices` cleanup script is emitted only when the module is requested, and `report` returns the right exit code.
+- `crates/cloudseed-cli/src/tui.rs` – 18 tests over the UI: form editing, validation errors, the timezone picker, focus navigation, and 8 render tests through `TestBackend`.
+- **A documentation guard**: every `yaml` block in `README.md` and `GUIDE.md` must parse as a valid config and pass validation. A broken or stale example fails the build.
 - Run with `cargo test --workspace`.
 
-### Integration / Smoke Tests
-- The CI workflow (`ci.yml`) builds the release binary for both `ubuntu-latest` and `windows-latest` and runs:
-  - `cargo fmt --check`
-  - `cargo test --workspace`
-  - `cargo clippy --workspace -- -D warnings`
-  - `cargo build --release --package cloudseed-cli`
-  - `./target/release/cloudseed-cli --help` (OS‑specific executable name)
-- This ensures the binary works on both major platforms.
-
-### Manual Testing
-- TUI can be launched with `cloudseed tui --config <path>` (or without argument to use `./cloudseed.yaml`).
-- End‑to‑end scenarios: create a minimal config, run `generate --dry-run`, inspect output, run `generate` to write files, inspect written files, run `validate --fix-it`, verify that plaintext passwords are hashed.
+### CI
+`.github/workflows/ci.yml` runs on `ubuntu-latest` and `windows-latest`:
+- `cargo test --workspace`
+- `cargo fmt --check`
+- `cargo clippy --workspace -- -D warnings`
+- `cargo build --release --package cloudseed-cli`
+- `./target/release/cloudseed-cli --help`
 
 ---  
 ## Future Work
-- **Provider Implementations**: Flesh out `AwsProvider`, `AzureProvider`, `GcpProvider` to call real APIs (e.g., AWS SSM for parameter store, Azure Key Vault, GCP Secret Manager) when fetching secrets or rendering platform‑specific cloud‑init snippets.
-- **Template Library**: Expand the set of Handlebars templates (networking, users, ssh, mounts, etc.) and document them.
-- **Interactive Wizard**: Enhance the TUI to guide users through a multi‑step wizard (e.g., select platform → fill base config → review → generate) rather than separate forms.
-- **Plugin System**: Allow third‑party crates to register additional providers or template helpers via a feature‑flag‑based discovery mechanism.
-- **Output Formats**: Support generating cloud‑init in multiple formats (YAML only currently) and possibly multi‑part (user‑data + vendor‑data).
-- **Self‑Updating**: Add a `cloudseed self-update` command that downloads the latest release from GitHub and replaces the binary.
-- **Completion Shells**: Add support for `powershell` and `elvish` (already present in the code but not yet advertised in help).
-- **Documentation**: Expand this file with sequence diagrams, example configurations, and a FAQ.
+- **Provider API calls**: AWS/Azure/GCP secret fetching. The platforms differ in identity, not in generated file shape, so one provider family covers the current scope.
+- **Template library**: per-module templates beyond the current single cloud-config.
+- **TUI wizard**: a multi-step flow (platform → OS → modules → review → generate) instead of separate forms.
+- **Self-update**: `cloudseed self-update` to pull the latest release.
+- **Interactive timezone data**: the picker uses a curated list of 60 common zones; the full IANA database would be better.
 
 ---  
-*This document should be edited whenever a significant change to the logic, data flow, or public interface is made. Keep it concise but complete enough for a new contributor to understand how the pieces fit together.*  
+*This document should be edited whenever a significant change to the logic, data flow, or public interface is made. Keep it concise but complete enough for a new contributor to understand how the pieces fit together.*

@@ -5,6 +5,46 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-10-22
+
+### Fixed
+- **Exit code on failure**: every command now exits `1` when it fails. Previously `generate`/`validate`/`completion` printed the error but exited `0`, so CI could not detect a failure.
+- **`--fix-it` no longer destroys the password**: it now writes a real SHA-512 crypt hash (`$6$...`) with a random salt, using the `password_rounds` from the config. It previously wrote the literal placeholder `$6$rounds=5000$examplesalt$`, which was not a hash of anything and locked the operator out of the target.
+- **Documented platforms now work**: `vsphere`, `kvm` and `physical` are accepted. The provider previously only accepted `local`, `aws`, `azure` and `gcp`, so every configuration in the documentation failed with "Unsupported platform".
+- **Config format is decided by the file extension**, not guessed by trying YAML and falling back to TOML. A malformed file now reports the format it tried, and an unknown extension is rejected instead of being silently parsed as TOML.
+- **Config fields are no longer silently dropped**: `Config` now models the fields the documentation describes. Serde used to ignore all of them, so a documented config generated output that ignored almost everything.
+- **The generated cloud-config uses the real configuration**: user name, SSH keys, groups, sudo, packages, timezone, locale, network and files are all rendered. The template previously hardcoded the user `ubuntu` and a truncated, invalid SSH key (`ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...`) that ended up in every generated VM.
+- **The `modules` list is honoured**: it was parsed and then never read by any provider.
+- **Output layout matches the documentation**: files are written to `out/<platform>-<os>/` with `user-data`, `meta-data`, `cloudseed.yaml` and `README.txt` (plus the Cloudbase-Init and Sysprep artifacts on Windows). Previously a single `user-data.yaml` was written into the output directory.
+- **Static networking is emitted** as cloud-init network config version 2, converting the dotted netmask to a prefix length.
+- **`--json-logs` actually emits JSON** instead of printing "not implemented" and falling back to plain text.
+- **`validate` accepts a directory** of configurations, as its help text claimed.
+- **TUI and CLI agree on the supported shells**: the TUI offered only bash, zsh and fish while the CLI also supported powershell and elvish.
+- **`Ctrl+C` quits the TUI** from any screen. Previously only `q` on the menu bar worked, so leaving a form took several Esc presses.
+- **A field whose module is disabled is reported**: setting `packages` while the `packages` module is off used to be silently dropped. The validator now names the field and the module.
+- **An unset timezone is no longer forced to `UTC`**: the timezone has no default now, so the generated cloud-config only carries a `timezone` key when one was configured, and the image default is left alone.
+- **The documented config examples are valid again**: the README's main example was missing `version` and `name` and carried a plaintext password, and a `###` heading had been left inside the YAML code block, which broke the example.
+
+### Added
+- **`cloudseed detect-cloud-init`**: reports the local cloud-init version and whether CloudSeed supports it.
+- **`cloudseed write-to-cloud-init-path`**: writes the generated config to `/etc/cloud/cloud.cfg.d/99-cloudseed.cfg` on a running Linux host.
+- **Windows artifacts**: `cloudbase-init.conf`, `cloudbase-init-unattend.conf`, `sysprep-unattend.xml` and `run-sysprep.bat` are now generated, and the cloud-config is written as `user-data` for Cloudbase-Init to consume.
+- **vSphere Guest Customization Specification export** (`vsphere-customization-spec.xml`) and the pre/post customization scripts.
+- **Validation rules** for unknown platforms, unknown modules, unknown OS types, static networking without an address or gateway, a locked password without an SSH key, and a Windows target without Sysprep.
+- **`network_domain`**, `sysprep_*` and `vsphere_*` configuration fields, all of which were previously documented but ignored.
+- **`template_best_practices` is now implemented**: it writes a `template-cleanup.sh` / `template-cleanup.bat` golden-image cleanup script and explains in `README.txt` how to seal the image. It is opt-in, because it adds a file.
+
+### Changed
+- **Password hashing uses `sha-crypt`**, adding one dependency. The `handlebars` dependency was dropped: the cloud-config is now built as typed values and serialized with `serde_yaml`, which handles quoting and block scalars correctly.
+- **A test guards the documentation**: every `yaml` block in `README.md` and `GUIDE.md` must parse as a valid config and pass validation, so the examples cannot drift away from the code again.
+- **The `cloudseed-testutils` crate was removed**; it was empty.
+- **The `aws`/`azure`/`gcp` feature flags were removed** from `cloudseed-core`; they were never referenced. The provider surface is now a single `PlatformProvider` parameterised by platform and OS.
+- **Shared command functions** (`cmd_generate`, `cmd_validate`, `cmd_completion`, `set_timezone`) are used by both the CLI and the TUI, so the two surfaces cannot drift.
+
+### Removed
+- **`cloudseed-core` feature flags** `aws`, `azure`, `gcp` (dead).
+- **Dead `render_template` helper** in `cloudseed-templates`.
+
 ## [2.1.8] - 2026-10-08
 
 ### Added

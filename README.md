@@ -67,6 +67,13 @@ cloudseed completion zsh > ~/.zsh/completions/_cloudseed
 cloudseed completion fish > ~/.config/fish/completions/cloudseed.fish
 cloudseed completion powershell > cloudseed.ps1
 cloudseed completion elvish > ~/.config/elvish/lib/cloudseed.elv
+
+# Report the local cloud-init version and whether it is supported
+cloudseed detect-cloud-init
+
+# Write the generated config straight to a running Linux host (needs root)
+cloudseed write-to-cloud-init-path --config config.yaml
+
 # Launch interactive Terminal User Interface (TUI)
 cloudseed tui --config config.yaml   # defaults to ./cloudseed.yaml if omitted
 ```
@@ -75,6 +82,8 @@ cloudseed tui --config config.yaml   # defaults to ./cloudseed.yaml if omitted
 
 ```yaml
 # config.yaml
+version: "1.0"                # config format version
+name: "web01"                 # project / deployment name
 platform: "vsphere"          # vsphere | kvm | physical
 os_type: "linux"             # linux | windows
 modules:
@@ -83,6 +92,8 @@ modules:
   - "ssh"
   - "network"
   - "packages"
+  - "locale"
+  - "files"
   - "firstboot"
 
 # Hostname
@@ -92,8 +103,8 @@ use_platform_hostname: true  # let platform set hostname
 
 # User
 username: "admin"
-password: "ChangeMe!123"     # hashed to $6$ by default
-plaintext_password: false
+password: "$6$rounds=5000$abcdefgh$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+plaintext_password: false    # true emits the password verbatim (discouraged)
 password_rounds: 5000
 sudo: true
 lock_password: false
@@ -123,13 +134,6 @@ packages:
 timezone: "UTC"
 locale: "en_US.UTF-8"
 keyboard_layout: "us"
-
-### Interactive timezone selection
-
-```bash
-# Interactive timezone configuration (region -> zone hierarchy)
-cloudseed timezone --config config.yaml
-```
 
 # Disk
 grow_device: "/dev/sda"
@@ -172,9 +176,19 @@ vsphere_post_script: ""
 use_sample_scripts: false
 ```
 
+### Interactive timezone selection
+
+```bash
+# Interactive timezone configuration (region -> zone hierarchy)
+cloudseed timezone --config config.yaml
+```
+
 Minimal Linux example:
 
 ```yaml
+version: "1.0"
+name: "web01"
+platform: "kvm"
 os_type: "linux"
 modules:
   - "hostname"
@@ -200,6 +214,7 @@ out/
 ├── kvm-windows/
 │   ├── cloudbase-init.conf
 │   ├── cloudbase-init-unattend.conf
+│   ├── user-data
 │   ├── sysprep-unattend.xml
 │   ├── run-sysprep.bat
 │   ├── cloudseed.yaml
@@ -219,6 +234,7 @@ out/
 
 **Windows** (`out/<platform>-windows/`):
 - `cloudbase-init.conf` / `cloudbase-init-unattend.conf` — Cloudbase-Init service config
+- `user-data` — cloud-config customization (Cloudbase-Init reads the same dialect as cloud-init)
 - `sysprep-unattend.xml` — Sysprep answer file (generates a **new SID**)
 - `run-sysprep.bat` — runs Sysprep generalize
 - `cloudseed.yaml`, `README.txt`
@@ -245,7 +261,11 @@ out/
 | `bootcmd` | ✅ | ❌ | 22.1 | Early boot commands |
 | `firstboot` | ✅ | ✅ | 22.1 | First-boot commands (runcmd / LocalScripts) |
 | `final` | ✅ | ❌ | 22.1 | Final status message on console |
-| `template_best_practices` | ✅ | ✅ | N/A | Template cleanup & preparation |
+| `template_best_practices` | ✅ | ✅ | N/A | Golden-image cleanup script (opt-in) |
+
+> **Note:** An empty `modules` list enables every module except
+> `template_best_practices`, which adds an extra file and must be requested
+> explicitly.
 
 ### Platform compatibility modules (avoid cloud-init conflicts)
 
@@ -280,12 +300,20 @@ out/
 | `generate --config FILE --output DIR` | Generate config files from YAML/TOML |
 | `generate --config FILE --dry-run` | Preview generated files without writing |
 | `validate --config FILE` | Validate configuration, print warnings |
-| `validate --config FILE --fix-it` | Validate and auto-fix common issues |
+| `validate --config FILE --fix-it` | Validate and auto-fix common issues (hashes a plaintext password) |
+| `validate --config DIR` | Validate every config in a directory |
 | `completion <shell>` | Generate completion script (bash, zsh, fish, powershell, elvish) |
-| `--verbose` | Enable verbose output |
+| `timezone --config FILE` | Interactively pick an IANA timezone and write it to the config |
+| `tui [--config FILE]` | Launch the interactive Terminal User Interface (defaults to `./cloudseed.yaml`) |
+| `detect-cloud-init` | Report the local cloud-init version and whether it is supported |
+| `write-to-cloud-init-path --config FILE` | Write the generated config to `/etc/cloud/cloud.cfg.d/99-cloudseed.cfg` (needs root) |
+| `--verbose` | Increase logging verbosity (repeat for more) |
 | `--quiet` | Suppress non-essential output |
 | `--json-logs` | Output logs in JSON format |
 | `--version` | Print version and exit |
+
+Every command exits `0` on success and `1` on failure, so CI can branch on the
+result.
 
 ## Configuration Validator
 
@@ -294,12 +322,15 @@ Validate exported configurations after generation or on existing config director
 ```bash
 cloudseed validate --config ./out/vsphere-linux/cloudseed.yaml
 cloudseed validate --config ./out/vsphere-linux/cloudseed.yaml --fix-it
+cloudseed validate --config ./out          # every config in the directory
 ```
 
 Checks:
-- **No persistent runs**: `runcmd` (per-instance), `bootcmd` (every boot), `phone_home`, package update/upgrade
-- **Config consistency**: required fields, module/file matching
-- **Windows**: sysprep-unattend.xml (generalize/specialize/oobe passes), Cloudbase-Init configs
+- **Required fields**: `version`, `name`, `platform`, `os_type`
+- **Known values**: `platform` must be `vsphere`, `kvm` or `physical`; `os_type` must be `linux` or `windows`; every entry in `modules` must be a known module
+- **Credentials**: a plaintext password is reported, and `--fix-it` replaces it with a real SHA-512 crypt hash (`$6$...`) using a random salt
+- **Reachability**: static networking without an address or gateway is reported
+- **Windows**: a Windows target without `sysprep` is reported, because cloned VMs would share a SID
 
 ## Warnings & Validation
 

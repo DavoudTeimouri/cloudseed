@@ -18,6 +18,7 @@ out/
 ├── kvm-windows/
 │   ├── cloudbase-init.conf
 │   ├── cloudbase-init-unattend.conf
+│   ├── user-data
 │   ├── sysprep-unattend.xml
 │   ├── run-sysprep.bat
 │   ├── cloudseed.yaml
@@ -37,6 +38,7 @@ out/
 
 **Windows** (`out/<platform>-windows/`)
 - `cloudbase-init.conf` / `cloudbase-init-unattend.conf` — Cloudbase-Init service config
+- `user-data` — the cloud-config customization (Cloudbase-Init reads the same dialect as cloud-init)
 - `sysprep-unattend.xml` — Sysprep answer file (generates a **new SID**)
 - `run-sysprep.bat` — runs Sysprep generalize
 - `cloudseed.yaml`, `README.txt`
@@ -45,6 +47,9 @@ out/
 - `vsphere-customization-spec.xml` — vSphere Guest Customization Specification (XML)
 - `vsphere-pre-script.sh/.bat` — Pre-customization script (runs before cloud-init/Cloudbase-Init)
 - `vsphere-post-script.sh/.bat` — Post-customization script (runs after cloud-init/Cloudbase-Init)
+
+**Template extras** (when `template_best_practices` is enabled)
+- `template-cleanup.sh` / `template-cleanup.bat` — the golden-image cleanup script to run before sealing the VM
 
 ---
 
@@ -265,19 +270,19 @@ cloud-init --version
 CloudSeed also provides:
 
 ```bash
-cloudseed --detect-cloud-init
+cloudseed detect-cloud-init
 ```
 
-This checks the local system and prints compatibility table.
+This checks the local system and prints the version and a compatibility verdict.
 
----
+---  
 
 ## 11. Write directly to cloud-init config path (Linux)
 
 For immediate testing on a running Linux VM:
 
 ```bash
-cloudseed --write-to-cloud-init-path --json config.json
+cloudseed write-to-cloud-init-path --config config.yaml
 ```
 
 This writes `user-data` to `/etc/cloud/cloud.cfg.d/99-cloudseed.cfg` (requires root). Then:
@@ -288,64 +293,55 @@ sudo cloud-init clean --reboot
 
 ⚠️ **Warning:** This modifies the running system. Use on test VMs only.
 
----
+---  
 
 ## 12. Re-using a config
 
 `cloudseed.yaml` is the full config. Re-apply without the menu:
 
 ```bash
-cloudseed --json out/cloudseed.yaml --out out2
+cloudseed generate --config out/cloudseed.yaml --output out2
 ```
 
----
+---  
 
 ## 13. Portable binary
 
-Build a single-file executable (no Python install needed on target):
+Build a single-file executable (no Rust install needed on target):
 
 ```bash
-pip install pyinstaller
-python build_dist.py
-# produces dist/cloudseed (Linux) / dist/cloudseed.exe (Windows)
+cargo build --release --package cloudseed-cli
+# produces target/release/cloudseed (Linux) / cloudseed.exe (Windows)
 ```
 
-The binary is fully self-contained and runs the same menu on Windows and Linux.
+Pre-built binaries for both platforms are published on the
+[GitHub Releases](https://github.com/DavoudTeimouri/cloudseed/releases) page.
 
----
+---  
 
 
 Validate exported configurations **after generation** or on existing config directories:
 
 ```bash
-cloudseed  # Main Menu → Config Validator → Validate a config directory
+cloudseed validate --config ./cloudseed-out
 ```
 
 Checks:
-- **No persistent runs**: `runcmd` (per-instance), `bootcmd` (every boot), `phone_home`, package update/upgrade
-- **cloudseed.yaml consistency**: required fields, module/file matching
-- **Windows**: sysprep-unattend.xml (generalize/specialize/oobe passes), Cloudbase-Init configs
+- **Required fields**: `version`, `name`, `platform`, `os_type`
+- **Known values**: platform, OS type and every module name are checked against the supported set
+- **Credentials**: a plaintext password is reported; `--fix-it` replaces it with a real SHA-512 crypt hash
+- **Reachability**: static networking without an address or gateway is reported
+- **Windows**: a Windows target without `sysprep` is reported, because cloned VMs would share a SID
 
 ### Example: Validate a config directory
 
 ```bash
-$ cloudseed
-# Select: Config Validator
-# Select: Validate a config directory
-# Enter path: ./cloudseed-out
+$ cloudseed validate --config ./cloudseed-out
+./cloudseed-out/vsphere-linux/cloudseed.yaml: Validation failed with 1 issue(s):
+  - password: password is stored in plaintext; hash it or set plaintext_password: true
+./cloudseed-out/kvm-linux/cloudseed.yaml: Configuration is valid.
 
-Validating: ./cloudseed-out
-==========================
-DIAGNOSIS SUMMARY
-==========================
-Cloud-init: 24.1 (✅ Fully supported (all modules))
-Status: done
-Errors: 0
-Warnings: 2
-==========================
-⚠️  WARNINGS:
-  - [cloud_init] runcmd present - commands run on first boot only (per-instance). Verify they are idempotent.
-  - [cloud_init] NTP configured in cloud-init - may conflict with platform/OS NTP. Consider 'Let Platform Handle NTP'.
+Checked 2 config(s), 1 with issues.
 ```
 
 ---
@@ -432,155 +428,139 @@ cloudseed
 ```bash
 # After deploying VMs, validate the generated config was applied correctly:
 
-# 1. On the running VM, run Cloud-Init Doctor:
-cloudseed  # Main Menu → Cloud-Init Doctor → Full Diagnosis
+# 1. On the running VM, check the cloud-init version and its support status:
+cloudseed detect-cloud-init
 
-# 2. Or save report for centralized monitoring:
-#    Main Menu → Cloud-Init Doctor → Save Diagnosis Report (JSON)
-#    Upload cloudseed-doctor-*.json to your monitoring system
-
-# 3. For CI/CD pipelines, run validator on generated configs:
-cloudseed  # Main Menu → Config Validator → Validate a config directory
+# 2. For CI/CD pipelines, validate the generated configs:
+cloudseed validate --config ./cloudseed-out
 # Checks that configs won't re-run unexpectedly after first boot
+
+# 3. Validate a single config and auto-fix a plaintext password:
+cloudseed validate --config ./cloudseed-out/vsphere-linux/cloudseed.yaml --fix-it
 ```
 
 ---
 
-## 21. Template Best Practices (NEW)
+## 21. Template Best Practices
 
-CloudSeed includes a **Template Best Practices** module (`template_best_practices`) that configures OS-specific cleanup and preparation steps for creating VM golden images. These settings control what actions are included when using the **Template Maker** (prepare current machine as template) or when generating cleanup scripts.
-
-When enabled, CloudSeed generates additional metadata and instructions in `README.txt` to guide the template preparation process. The actual cleanup is performed by the Template Maker menu or the generated scripts (Linux `.sh`, Windows `.bat`).
+The `template_best_practices` module prepares a target image to become a golden
+image. When it is enabled, CloudSeed writes a cleanup script next to the
+configuration and explains in `README.txt` what to run before sealing the VM.
 
 ### Linux Best Practices
-- **Log cleanup**: Truncate `/var/log/*.log`, `/var/log/*/*.log`, vacuum systemd journal
+- **Log cleanup**: Truncate `/var/log/*.log`, vacuum the systemd journal
 - **Temp files**: Clean `/tmp`, `/var/tmp`
 - **SSH host keys**: Remove `/etc/ssh/ssh_host_*` (regenerated on first boot)
 - **Machine-id**: Remove `/etc/machine-id` and `/var/lib/dbus/machine-id`
 - **Package cache**: `apt clean`, `dnf clean all`, `zypper clean`, `yum clean all`
-- **Cloud-init**: `cloud-init clean --machine-id`
+- **Cloud-init**: `cloud-init clean --machine-id --logs --seed`
 - **Udev rules**: Remove persistent net rules (`/etc/udev/rules.d/70-persistent-net.rules`)
-- **Tooling**: Install `open-vm-tools` (vSphere) or `qemu-guest-agent` (KVM)
 
 ### Windows Best Practices
 - **Event Logs**: Clear System, Security, Application logs via `wevtutil cl`
-- **Windows Update cache**: Clean `C:\\Windows\\SoftwareDistribution\\Download`
+- **Windows Update cache**: Clean `C:\Windows\SoftwareDistribution\Download`
 - **DriverStore**: Remove old drivers via `pnputil /delete-driver`
-- **Tooling**: Install `VMware Tools` (vSphere) or `qemu-guest-agent` (KVM)
 
 ### Usage
-1. Enable the `template_best_practices` module during configuration
-2. Customize which cleanup actions to include via the interactive prompts
-3. Generate configs and follow the instructions in the output `README.txt`
-4. For direct template preparation, use the **Template Maker** menu from the main menu
-   - Requires running as root/Administrator
-   - Includes multi-confirmation for production safety (typed confirmations: `PHYSICAL-OK`, `NO-ADMIN-OK`, `I-UNDERSTAND`)
-   - Can generate a standalone cleanup script for manual execution on target VMs
+1. Enable the `template_best_practices` module in the configuration
+2. Generate the configuration
+3. Copy `template-cleanup.sh` (or `template-cleanup.bat`) to the target
+4. Run it on the target as root/Administrator, just before shutting the VM down
+5. Convert the VM to a template
 
-> **Note**: These settings are **informational** when generating configs for provisioning. They do not affect the generated `user-data`/`meta-data` directly. Instead, they are recorded in `cloudseed.yaml` and explained in `README.txt` to guide the template creation process.
+> **Note**: The module does not change the generated `user-data`/`meta-data`.
+> It adds the cleanup script and the instructions that explain how to seal the
+> image correctly, so every clone gets a fresh identity — a new machine-id, new
+> SSH host keys, and on Windows a new SID.
 
----\n## 22. Banner and Menu Overview (v2.0.0+)
+---\n## 22. Command and TUI Overview
 
-All menus display a consistent banner:
+### Commands
 
-```
-============================================================
-  CloudSeed v1.5.0
-  cloud-init / Cloudbase-Init VM Template Generator
-  Main Menu
-============================================================
+CloudSeed is driven by subcommands. Every one of them exits `0` on success and
+`1` on failure, so they can be chained in a pipeline or used as a CI gate.
 
-  1) Generate Configuration
-  2) Toolbox (External Tools)
-  3) Config Validator
-  4) Cloud-Init Doctor
-  5) Template Maker
-  6) Guide Help (Configuration Reference)
-  7) Exit
-```
+| Command | Purpose |
+|---------|---------|
+| `generate` | Write the configuration files for a platform/OS pair |
+| `validate` | Check a config file, or every config in a directory |
+| `completion` | Emit a shell completion script |
+| `timezone` | Interactively pick an IANA timezone and write it to the config |
+| `tui` | Open the interactive terminal interface |
+| `detect-cloud-init` | Report the local cloud-init version and its support status |
+| `write-to-cloud-init-path` | Write the generated config to a running Linux host |
 
-Each sub-menu shows:
-- **Title** in colored section header (e.g., "Module Selection", "Network Configuration")
-- **Description** of what the menu does
-- **Default values** in [brackets]
-- **Numbered options** for easy selection
-- **0) ← Back** to return to previous menu
+Global flags: `--verbose` (repeat for more), `--quiet`, `--json-logs`.
 
-### Module Selection (Generate Configuration → Platform → OS)
+### Terminal User Interface
 
-The module selection screen now shows **all available modules** with real-time toggle:
+`cloudseed tui` opens a ratatui interface with four regions:
 
 ```
-============================================================
-  CloudSeed v1.5.0
-  Module Selection (Linux / vSphere)
-============================================================
-
-Available modules (toggle by number + `Enter` to confirm, `c` to configure selected, `a`=all, `n`=none, `0`=back):
-
-  [ ] 1) hostname              - Set hostname via cloud-init
-  [✓] 2) platform_hostname    - Let platform set VM hostname
-  [ ] 3) users                - Create admin user + password
-  [ ] 4) ssh                  - SSH authorized keys + password auth
-  [ ] 5) root                 - Harden root (disable root SSH login)
-  [ ] 6) network              - Network (DHCP / static IP)
-  [✓] 7) platform_network     - Let platform handle network
-  [ ] 8) packages             - Install OS packages / upgrade
-  [ ] 9) locale               - Locale + keyboard + timezone
-  [ ] 10) disk                - Grow root filesystem (growpart)
-  [ ] 11) ntp                 - NTP time servers
-  [✓] 12) platform_ntp        - Let platform handle NTP
-  [ ] 13) files               - Write arbitrary files
-  [ ] 14) bootcmd             - Early boot commands
-  [ ] 15) firstboot           - First-boot commands (runcmd)
-  [ ] 16) final               - Final status message
-  [ ] 17) vsphere_spec        - vSphere Customization Spec (XML)
-  [ ] 18) vsphere_scripts     - vSphere Pre/Post Scripts
-
-Commands: [number] toggle + Enter=confirm | c=configure | a=all | n=none | 0/Esc=back
++--------------------------------------------------------------+
+| Generate  Validate  Completion  Timezone                      |  <- menu bar
++----------------------+---------------------------------------+
+| Run generate         |                                       |
+|                      |   action panel: form, timezone        |
+|                      |   picker, or command output           |
++----------------------+---------------------------------------+
 ```
 
-**Key behaviors:**
-- **Platform modules always visible** — `platform_hostname`, `platform_network`, `platform_ntp` shown for vSphere, KVM, and Physical/Other
-- **Real-time conflict resolution** — selecting a platform module auto-disables its cloud-init equivalent (and vice versa) with info message
-- **Defaults**: platform modules ON, cloud-init equivalents OFF
-- Press `c` to enter per-module configuration flow (each selected module configured one-by-one)
-- Press `0` to go back to OS selection
+| Key | Menu bar | Command list | Form | Timezone |
+|-----|----------|---------------|------|----------|
+| `←` `→` | move between entries | — | — | switch column |
+| `↑` `↓` | — | move the highlight | move between fields | move within the column |
+| `Enter` | open the menu | run the command | submit the form | pick the zone |
+| `Esc` | quit | back to the menu bar | back to the menu bar | back to the command list |
+| `q` | quit | — | — | — |
+| `Ctrl+C` | quit | quit | quit | quit |
 
-### Per-Module Configuration Flow
+The timezone picker is hierarchical: the left column holds the IANA regions,
+the right column the zones in the selected region. The last entry of the left
+column is **Custom…**, which takes a free-form IANA zone.
 
-After pressing `c`, each selected module is configured sequentially with its own sub-menu. Example for Network module:
+The TUI and the CLI share the same command functions, so a command that works
+in one works identically in the other.
 
-```
-============================================================
-  CloudSeed v1.5.0
-  Network Configuration
-============================================================
+### Modules
 
-Configure network for the target VM.
+The `modules` list in the configuration selects what is generated. An empty
+list means every module is enabled.
 
-  1) Mode: DHCP (default) or Static
-  2) Interface: eth0
-  3) Address: (static only)
-  4) Netmask: 255.255.255.0 (static only)
-  5) Gateway: (static only)
-  6) DNS: 8.8.8.8,1.1.1.1
-  7) Search domains: 
+| Module | Effect |
+|--------|--------|
+| `hostname` | Set the hostname, and manage `/etc/hosts` |
+| `users` | Create the primary user with its password, sudo and groups |
+| `ssh` | Authorize SSH keys and set the password-authentication policy |
+| `root` | Disable root SSH logins |
+| `network` | Configure the interface (DHCP or static) and DNS |
+| `packages` | Install packages and run the package upgrade |
+| `locale` | Set the locale, keyboard layout and timezone |
+| `disk` | Grow the root partition |
+| `ntp` | Configure the NTP servers |
+| `files` | Write files to the target |
+| `bootcmd` | Run commands on every boot |
+| `firstboot` | Run commands once, on the first boot |
+| `final` | Print a final message when the boot completes |
+| `template_best_practices` | Add the golden-image cleanup script and instructions |
+| `platform_hostname` | Let the platform set the hostname (disables `hostname`) |
+| `platform_network` | Let the platform configure the network (disables `network`) |
+| `platform_ntp` | Let the platform configure NTP (disables `ntp`) |
+| `vsphere_spec` | Export the vSphere Guest Customization Specification |
+| `vsphere_scripts` | Emit the vSphere pre/post customization scripts |
 
-Press Enter for default [value], type to override. 0=back to module selection.
-```
+A `platform_*` module and its cloud-init counterpart are mutually exclusive.
+Setting `use_platform_hostname`, `let_platform_handle_network` or
+`let_platform_handle_ntp` in the configuration disables the matching module
+automatically, so cloud-init never fights the hypervisor over the same
+concern.
 
-Each module's configuration applies defaults if you press Enter. You can go back to module selection from any sub-menu.
+---  
 
----
+## 23. Graceful shutdown
 
-## 22. Graceful shutdown
-
-Press `Ctrl+C` at any prompt to exit cleanly:
-
-```
-[CloudSeed] Interrupted. Shutting down gracefully...
-```
+Press `Ctrl+C` in the TUI to exit at any time. The terminal is restored to its
+normal mode on the way out.
 
 ---
 
