@@ -26,6 +26,17 @@ if [ ! -f "$WORKFLOW" ]; then
     exit 1
 fi
 
+# The awk implementations to test the changelog step against.
+awk_impls() {
+    local found=""
+    for impl in awk gawk mawk; do
+        if command -v "$impl" >/dev/null 2>&1; then
+            found="$found $impl"
+        fi
+    done
+    echo "$found"
+}
+
 # Extract a `run:` block from the workflow, stripped of its YAML indentation.
 extract_step() {
     local start="$1" end="$2"
@@ -62,7 +73,7 @@ check_tag() {
     : > "$GITHUB_OUTPUT"
     ( cd "$work" && bash resolve.sh )
 
-    local base prerelease make_latest
+    local base prerelease make_latest failed=0
     base=$(grep '^base=' "$GITHUB_OUTPUT" | cut -d= -f2)
     prerelease=$(grep '^prerelease=' "$GITHUB_OUTPUT" | cut -d= -f2)
     make_latest=$(grep '^make_latest=' "$GITHUB_OUTPUT" | cut -d= -f2)
@@ -71,7 +82,29 @@ check_tag() {
         | sed "s#\${{ steps.version.outputs.base }}#$base#" \
         > "$work/changelog.sh"
     cp "$CHANGELOG" "$work/CHANGELOG.md"
-    ( cd "$work" && bash changelog.sh )
+
+    # The changelog step must produce the same result under every awk
+    # implementation available. The runners use gawk, which processes escape
+    # sequences in -v assignments, while many local systems have mawk, which
+    # does not. A step that only works under one of them breaks in CI and
+    # passes locally.
+    for awk_impl in $(awk_impls); do
+        mkdir -p "$work/bin-$awk_impl"
+        ln -sf "$(command -v "$awk_impl")" "$work/bin-$awk_impl/awk"
+        (
+            cd "$work"
+            PATH="$work/bin-$awk_impl:$PATH" bash changelog.sh
+        )
+        if [ ! -s "$work/changelog.md" ]; then
+            echo "  FAIL: the changelog step produced nothing under $awk_impl"
+            failed=1
+        else
+            echo "  awk:        $awk_impl ok"
+        fi
+    done
+    if [ "$failed" -ne 0 ]; then
+        return 1
+    fi
 
     # The payload is built by the same script the workflow runs.
     (

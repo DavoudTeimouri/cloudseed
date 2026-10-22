@@ -46,6 +46,7 @@ All findings verified by running the real release binary.
 | 32 | Two workflows both created a release for the same tag, one publishing raw binaries | Done — `release.yml` is the only publisher; `ci.yml` keeps only test and build |
 | 33 | A pre-release tag produced an empty release body and a stable release | Done — the tag suffix marks the release as a pre-release, the changelog is looked up by the plain version, and `make_latest` is false for a pre-release |
 | 34 | The GitHub API rejects a pre-release that is also marked as the latest release, so the RC was never created | Done — the release is now posted through the API with an explicit payload; `scripts/simulate-release.sh` dry-runs it |
+| 35 | The changelog lookup used a regex passed through `awk -v`, and gawk processes escape sequences there, so the pattern became a character class that never matched. It worked under mawk locally and failed on the runners. | Done — the lookup is a literal substring match, and the simulation now runs the step under every awk available |
 
 ---
 

@@ -74,10 +74,13 @@ jobs:
       - name: Generate Changelog
         run: |
           BASE="${{ steps.version.outputs.base }}"
-          ESCAPED_VERSION=$(echo "$BASE" | sed 's/\./\\./g')
-          awk -v ver="\[${ESCAPED_VERSION}\]" '
-            $0 ~ "^## " ver { found=1; next }
-            found && /^## \[/ { exit }
+          # index() is a literal substring match, so this works the same under
+          # gawk and mawk. A regex here breaks under gawk, which processes
+          # escape sequences in -v assignments and would turn the escaped
+          # pattern into a character class that never matches.
+          awk -v base="$BASE" '
+            index($0, "## [" base "]") == 1 { found=1; next }
+            found && index($0, "## [") == 1 { exit }
             found { print }
           ' CHANGELOG.md > changelog.md
           if [ ! -s changelog.md ]; then
@@ -97,7 +100,7 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           # A previous run may have left a release behind for this tag.
           existing=$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id" || true)
           if [ -n "$existing" ]; then
             echo "Removing the existing release $existing for $TAG"
             gh api --method DELETE "repos/${{ github.repository }}/releases/$existing"
