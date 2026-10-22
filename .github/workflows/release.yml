@@ -86,28 +86,12 @@ jobs:
           fi
       - name: Build the release payload
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          python3 - "$TAG" "${{ steps.version.outputs.prerelease }}" "${{ steps.version.outputs.make_latest }}" > release.json <<'PY'
-          import json
-          import sys
-
-          tag, prerelease, make_latest = sys.argv[1:4]
-          with open("changelog.md", encoding="utf-8") as handle:
-              body = handle.read()
-
-          json.dump(
-              {
-                  "tag_name": tag,
-                  "name": "CloudSeed " + tag,
-                  "body": body,
-                  "draft": False,
-                  "prerelease": prerelease == "true",
-                  "make_latest": make_latest,
-              },
-              sys.stdout,
-          )
-          PY
-          cat release.json
+          python3 scripts/make-release-payload.py \
+            --tag "${{ github.event.inputs.tag || github.ref_name }}" \
+            --prerelease "${{ steps.version.outputs.prerelease }}" \
+            --make-latest "${{ steps.version.outputs.make_latest }}" \
+            --changelog changelog.md \
+            --out release.json
       - name: Create the release
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"

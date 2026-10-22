@@ -39,9 +39,8 @@ extract_step() {
 
 RESOLVE=$(extract_step "Resolve version" "Generate Changelog")
 CHANGELOG_STEP=$(extract_step "Generate Changelog" "Build the release payload")
-PAYLOAD_STEP=$(extract_step "Build the release payload" "Create the release")
 
-for step in "$RESOLVE" "$CHANGELOG_STEP" "$PAYLOAD_STEP"; do
+for step in "$RESOLVE" "$CHANGELOG_STEP"; do
     if [ -z "$step" ]; then
         echo "error: could not extract the release steps from the workflow" >&2
         exit 1
@@ -74,12 +73,16 @@ check_tag() {
     cp "$CHANGELOG" "$work/CHANGELOG.md"
     ( cd "$work" && bash changelog.sh )
 
-    echo "$PAYLOAD_STEP" \
-        | sed "s#\${{ github.event.inputs.tag || github.ref_name }}#$tag#" \
-        | sed "s#\${{ steps.version.outputs.prerelease }}#$prerelease#" \
-        | sed "s#\${{ steps.version.outputs.make_latest }}#$make_latest#" \
-        > "$work/payload.sh"
-    ( cd "$work" && bash payload.sh > /dev/null )
+    # The payload is built by the same script the workflow runs.
+    (
+        cd "$work"
+        python3 "$REPO/scripts/make-release-payload.py" \
+            --tag "$tag" \
+            --prerelease "$prerelease" \
+            --make-latest "$make_latest" \
+            --changelog changelog.md \
+            --out release.json > /dev/null
+    )
 
     echo "tag:            $tag"
     echo "  base:         $base"
