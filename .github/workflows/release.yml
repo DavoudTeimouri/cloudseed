@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag release (e.g., v2.1.6)'
+        description: 'Tag release (e.g., v2.2.0 or v2.2.0-rc.1)'
         required: true
-        default: 'v2.1.6'
+        default: 'v2.2.0'
 
 permissions:
   contents: write
@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ github.event.inputs.tag || github.ref_name }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      version: ${{ steps.version.outputs.base }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -45,17 +47,36 @@ jobs:
           cd ..
           echo "zip_path=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
           echo "asset_name=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
-      - name: Generate Changelog
-        id: changelog
+      - name: Resolve version
+        id: version
         run: |
           TAG_NAME="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION=${TAG_NAME#v}
-          ESCAPED_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
+          # A tag with a suffix (2.2.0-rc.1) is a pre-release; the plain
+          # version (2.2.0) is the stable one.
+          case "$VERSION" in
+            *-*) PRERELEASE=true ;;
+            *)    PRERELEASE=false ;;
+          esac
+          # The changelog section is keyed by the plain version, so the
+          # pre-release suffix is stripped for the lookup.
+          BASE=${VERSION%%-*}
+          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          BASE="${{ steps.version.outputs.base }}"
+          ESCAPED_VERSION=$(echo "$BASE" | sed 's/\./\\./g')
           CHANGELOG=$(awk -v ver="\[${ESCAPED_VERSION}\]" '
             $0 ~ "^## " ver { found=1; next }
             found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md)
+          if [ -z "$CHANGELOG" ]; then
+            echo "::error::no changelog section found for version $BASE"
+            exit 1
+          fi
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -64,10 +85,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Release ${{ github.event.inputs.tag || github.ref_name }}
+          name: CloudSeed ${{ github.event.inputs.tag || github.ref_name }}
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.version.outputs.prerelease }}
           files: ${{ steps.zip.outputs.zip_path }}
 
   build-windows:
@@ -104,6 +125,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.build-linux.outputs.release_tag }}
+          # The prerelease flag must be repeated here, or the update would
+          # reset the release back to a stable one.
+          prerelease: ${{ needs.build-linux.outputs.prerelease }}
           files: ${{ steps.zip.outputs.zip_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

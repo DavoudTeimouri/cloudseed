@@ -43,6 +43,8 @@ All findings verified by running the real release binary.
 | 29 | The cloud-config degenerated to `{}` when no cloud module was enabled | Done — the header is emitted alone |
 | 30 | `--version` was documented but the command had no version | Done — a test now checks the documented flags and subcommands exist |
 | 31 | `--quiet` only removed the log line numbers | Done — it now drops the log level to warnings and errors |
+| 32 | Two workflows both created a release for the same tag, one publishing raw binaries | Done — `release.yml` is the only publisher; `ci.yml` keeps only test and build |
+| 33 | A pre-release tag produced an empty release body and a stable release | Done — the tag suffix marks the release as a pre-release, and the changelog is looked up by the plain version |
 
 ---
 

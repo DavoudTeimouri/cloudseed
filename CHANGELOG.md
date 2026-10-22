@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`template_best_practices` is now implemented**: it writes a `template-cleanup.sh` / `template-cleanup.bat` golden-image cleanup script and explains in `README.txt` how to seal the image. It is opt-in, because it adds a file.
 
 ### Changed
+- **The release workflow now handles pre-release tags**: a tag with a suffix (`v2.2.0-rc.1`) publishes the release as a pre-release, and the changelog section is looked up by the plain version (`2.2.0`), so the release body is no longer empty.
+- **One workflow publishes releases, not two**: the duplicate release job in `ci.yml` published raw binaries alongside the ZIPs and could overwrite the release. `release.yml` is now the only publisher, and it produces the Linux and Windows ZIPs.
 - **Password hashing uses `sha-crypt`**, adding one dependency. The `handlebars` dependency was dropped: the cloud-config is now built as typed values and serialized with `serde_yaml`, which handles quoting and block scalars correctly.
 - **A test guards the documentation**: every `yaml` block in `README.md` and `GUIDE.md` must parse as a valid config and pass validation, so the examples cannot drift away from the code again.
 - **The `cloudseed-testutils` crate was removed**; it was empty.

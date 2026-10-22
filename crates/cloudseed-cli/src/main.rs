@@ -727,7 +727,7 @@ mod tests {
         );
     }
 
-    /// Every `yaml` code block in the documentation must be a valid config.
+    /// Every `yaml` block in the documentation must be a valid config.
     ///
     /// This keeps the docs and the code from drifting apart: a config example
     /// that no longer parses, or that omits a required field, fails the build.
@@ -757,6 +757,28 @@ mod tests {
                     issues
                 );
             }
+        }
+    }
+
+    /// The workflow files must be valid YAML, or a release would fail.
+    #[test]
+    fn workflows_are_valid_yaml() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("workspace root");
+
+        for workflow in ["ci.yml", "release.yml"] {
+            let path = root.join(".github/workflows").join(workflow);
+            let text = fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
+            let parsed: serde_yaml::Value = serde_yaml::from_str(&text)
+                .unwrap_or_else(|e| panic!("{} is not valid YAML: {}", workflow, e));
+            assert!(
+                parsed.get("jobs").is_some(),
+                "{} has no jobs section",
+                workflow
+            );
         }
     }
 
