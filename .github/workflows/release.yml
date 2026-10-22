@@ -20,6 +20,7 @@ jobs:
     outputs:
       release_tag: ${{ github.event.inputs.tag || github.ref_name }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      make_latest: ${{ steps.version.outputs.make_latest }}
       version: ${{ steps.version.outputs.base }}
     steps:
       - name: Checkout repository
@@ -58,10 +59,18 @@ jobs:
             *-*) PRERELEASE=true ;;
             *)    PRERELEASE=false ;;
           esac
+          # A pre-release cannot be the latest release, and the API rejects
+          # the request outright if make_latest is left at its default.
+          if [ "$PRERELEASE" = "true" ]; then
+            MAKE_LATEST=false
+          else
+            MAKE_LATEST=true
+          fi
           # The changelog section is keyed by the plain version, so the
           # pre-release suffix is stripped for the lookup.
           BASE=${VERSION%%-*}
           echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          echo "make_latest=$MAKE_LATEST" >> $GITHUB_OUTPUT
           echo "base=$BASE" >> $GITHUB_OUTPUT
       - name: Generate Changelog
         id: changelog
@@ -89,6 +98,7 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: ${{ steps.version.outputs.prerelease }}
+          make_latest: ${{ steps.version.outputs.make_latest }}
           files: ${{ steps.zip.outputs.zip_path }}
 
   build-windows:
@@ -128,6 +138,7 @@ jobs:
           # The prerelease flag must be repeated here, or the update would
           # reset the release back to a stable one.
           prerelease: ${{ needs.build-linux.outputs.prerelease }}
+          make_latest: ${{ needs.build-linux.outputs.make_latest }}
           files: ${{ steps.zip.outputs.zip_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
