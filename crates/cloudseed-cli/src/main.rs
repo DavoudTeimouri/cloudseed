@@ -84,7 +84,7 @@ const MIN_CLOUD_INIT: (u32, u32) = (22, 1);
 
 #[derive(Parser)]
 #[command(name = "cloudseed")]
-#[command(about = "A tool for generating cloud-init configurations", long_about = None)]
+#[command(version, about = "A tool for generating cloud-init configurations", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -93,7 +93,7 @@ struct Cli {
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 
-    /// Decrease logging verbosity
+    /// Suppress non-essential output
     #[arg(short, long)]
     quiet: bool,
 
@@ -521,11 +521,15 @@ fn main() {
     let cli = Cli::parse();
 
     // Initialize logging
-    let verbosity = match cli.verbose {
-        0 => Level::INFO,
-        1 => Level::DEBUG,
-        2 => Level::TRACE,
-        _ => Level::TRACE,
+    let verbosity = if cli.quiet {
+        // Quiet keeps warnings and errors, drops everything else.
+        Level::WARN
+    } else {
+        match cli.verbose {
+            0 => Level::INFO,
+            1 => Level::DEBUG,
+            _ => Level::TRACE,
+        }
     };
 
     let mut builder = tracing_subscriber::fmt::fmt()
@@ -753,6 +757,51 @@ mod tests {
                     issues
                 );
             }
+        }
+    }
+
+    /// The command line must expose the flags the documentation lists.
+    #[test]
+    fn cli_exposes_the_documented_flags() {
+        // `--version` is handled by clap, which exits with a display error.
+        match Cli::try_parse_from(["cloudseed", "--version"]) {
+            Err(e) => assert_eq!(
+                e.kind(),
+                clap::error::ErrorKind::DisplayVersion,
+                "--version did not report the version"
+            ),
+            Ok(_) => panic!("--version should not produce a parsed command"),
+        }
+
+        // The documented global flags must be accepted.
+        for args in [
+            vec!["cloudseed", "--verbose", "generate", "--config", "c.yaml"],
+            vec!["cloudseed", "--quiet", "generate", "--config", "c.yaml"],
+            vec!["cloudseed", "--json-logs", "generate", "--config", "c.yaml"],
+        ] {
+            assert!(
+                Cli::try_parse_from(&args).is_ok(),
+                "the arguments {:?} were rejected",
+                args
+            );
+        }
+
+        // Every documented subcommand must exist.
+        let command = Cli::command();
+        for sub in [
+            "generate",
+            "validate",
+            "completion",
+            "timezone",
+            "tui",
+            "detect-cloud-init",
+            "write-to-cloud-init-path",
+        ] {
+            assert!(
+                command.get_subcommands().any(|s| s.get_name() == sub),
+                "the {} subcommand is missing",
+                sub
+            );
         }
     }
 

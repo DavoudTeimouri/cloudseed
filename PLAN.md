@@ -41,6 +41,8 @@ All findings verified by running the real release binary.
 | 27 | The README's main config example did not parse (a `###` heading sat inside the YAML block) and was missing `version`/`name` | Done — plus a test that guards every YAML block in README.md and GUIDE.md |
 | 28 | The timezone had a `UTC` default, so an unset timezone looked "set" | Done — no default, the image default is left alone |
 | 29 | The cloud-config degenerated to `{}` when no cloud module was enabled | Done — the header is emitted alone |
+| 30 | `--version` was documented but the command had no version | Done — a test now checks the documented flags and subcommands exist |
+| 31 | `--quiet` only removed the log line numbers | Done — it now drops the log level to warnings and errors |
 
 ---
 

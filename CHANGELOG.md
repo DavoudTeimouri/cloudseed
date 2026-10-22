@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A field whose module is disabled is reported**: setting `packages` while the `packages` module is off used to be silently dropped. The validator now names the field and the module.
 - **An unset timezone is no longer forced to `UTC`**: the timezone has no default now, so the generated cloud-config only carries a `timezone` key when one was configured, and the image default is left alone.
 - **The documented config examples are valid again**: the README's main example was missing `version` and `name` and carried a plaintext password, and a `###` heading had been left inside the YAML code block, which broke the example.
+- **`--version` works**: the flag was documented but the command had no version, so it was rejected as an unknown argument.
+- **`--quiet` actually quiets the output**: it only removed the log line numbers. It now drops the log level to warnings and errors.
 
 ### Added
 - **`cloudseed detect-cloud-init`**: reports the local cloud-init version and whether CloudSeed supports it.
