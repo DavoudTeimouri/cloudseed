@@ -47,7 +47,6 @@ jobs:
           zip ../cloudseed-linux-x86_64.zip cloudseed
           cd ..
           echo "zip_path=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
-          echo "asset_name=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
       - name: Resolve version
         id: version
         run: |
@@ -73,33 +72,59 @@ jobs:
           echo "make_latest=$MAKE_LATEST" >> $GITHUB_OUTPUT
           echo "base=$BASE" >> $GITHUB_OUTPUT
       - name: Generate Changelog
-        id: changelog
         run: |
           BASE="${{ steps.version.outputs.base }}"
           ESCAPED_VERSION=$(echo "$BASE" | sed 's/\./\\./g')
-          CHANGELOG=$(awk -v ver="\[${ESCAPED_VERSION}\]" '
+          awk -v ver="\[${ESCAPED_VERSION}\]" '
             $0 ~ "^## " ver { found=1; next }
             found && /^## \[/ { exit }
             found { print }
-          ' CHANGELOG.md)
-          if [ -z "$CHANGELOG" ]; then
+          ' CHANGELOG.md > changelog.md
+          if [ ! -s changelog.md ]; then
             echo "::error::no changelog section found for version $BASE"
             exit 1
           fi
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-      - name: Create Release and Upload Linux Asset
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: CloudSeed ${{ github.event.inputs.tag || github.ref_name }}
-          body: ${{ steps.changelog.outputs.changelog }}
-          draft: false
-          prerelease: ${{ steps.version.outputs.prerelease }}
-          make_latest: ${{ steps.version.outputs.make_latest }}
-          files: ${{ steps.zip.outputs.zip_path }}
+      - name: Build the release payload
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          python3 - "$TAG" "${{ steps.version.outputs.prerelease }}" "${{ steps.version.outputs.make_latest }}" > release.json <<'PY'
+          import json
+          import sys
+
+          tag, prerelease, make_latest = sys.argv[1:4]
+          with open("changelog.md", encoding="utf-8") as handle:
+              body = handle.read()
+
+          json.dump(
+              {
+                  "tag_name": tag,
+                  "name": "CloudSeed " + tag,
+                  "body": body,
+                  "draft": False,
+                  "prerelease": prerelease == "true",
+                  "make_latest": make_latest,
+              },
+              sys.stdout,
+          )
+          PY
+          cat release.json
+      - name: Create the release
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          # A previous run may have left a release behind for this tag.
+          existing=$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+          if [ -n "$existing" ]; then
+            echo "Removing the existing release $existing for $TAG"
+            gh api --method DELETE "repos/${{ github.repository }}/releases/$existing"
+          fi
+          gh api --method POST "repos/${{ github.repository }}/releases" --input release.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload the Linux asset
+        run: gh release upload "${{ github.event.inputs.tag || github.ref_name }}" "${{ steps.zip.outputs.zip_path }}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
     runs-on: windows-latest
@@ -129,16 +154,8 @@ jobs:
           7z a ..\cloudseed-windows-x86_64.zip cloudseed.exe
           cd ..
           echo "zip_path=cloudseed-windows-x86_64.zip" >> $env:GITHUB_OUTPUT
-          echo "asset_name=cloudseed-windows-x86_64.zip" >> $env:GITHUB_OUTPUT
         shell: powershell
-      - name: Upload Windows Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.build-linux.outputs.release_tag }}
-          # The prerelease flag must be repeated here, or the update would
-          # reset the release back to a stable one.
-          prerelease: ${{ needs.build-linux.outputs.prerelease }}
-          make_latest: ${{ needs.build-linux.outputs.make_latest }}
-          files: ${{ steps.zip.outputs.zip_path }}
+      - name: Upload the Windows asset
+        run: gh release upload "${{ needs.build-linux.outputs.release_tag }}" "${{ steps.zip.outputs.zip_path }}" --clobber
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

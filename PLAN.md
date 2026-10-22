@@ -45,7 +45,7 @@ All findings verified by running the real release binary.
 | 31 | `--quiet` only removed the log line numbers | Done — it now drops the log level to warnings and errors |
 | 32 | Two workflows both created a release for the same tag, one publishing raw binaries | Done — `release.yml` is the only publisher; `ci.yml` keeps only test and build |
 | 33 | A pre-release tag produced an empty release body and a stable release | Done — the tag suffix marks the release as a pre-release, the changelog is looked up by the plain version, and `make_latest` is false for a pre-release |
-| 34 | The GitHub API rejects a pre-release that is also marked as the latest release, so the RC was never created | Done — `make_latest` is now false for a pre-release; `scripts/simulate-release.sh` dry-runs the release metadata |
+| 34 | The GitHub API rejects a pre-release that is also marked as the latest release, so the RC was never created | Done — the release is now posted through the API with an explicit payload; `scripts/simulate-release.sh` dry-runs it |
 
 ---
 

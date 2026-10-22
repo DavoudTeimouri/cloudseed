@@ -2,14 +2,15 @@
 # Dry-run the release metadata that .github/workflows/release.yml computes.
 #
 # The release workflow resolves the version from the tag, decides whether the
-# release is a pre-release, and extracts the matching CHANGELOG section. Those
-# three steps are where a release silently goes wrong: a pre-release tag used
-# to produce an empty changelog body and a stable release, and the API
-# rejects a pre-release that is also marked as the latest one.
+# release is a pre-release, extracts the matching CHANGELOG section, and
+# builds the API payload. Those steps are where a release silently goes wrong:
+# a pre-release tag used to produce an empty changelog body and a stable
+# release, and the API rejects a pre-release that is also marked as the latest
+# one.
 #
 # This script runs the real step scripts, extracted from the real workflow,
-# against the real CHANGELOG, so the result can be checked without publishing
-# anything.
+# against the real CHANGELOG, and checks the resulting payload, so the release
+# can be verified without publishing anything.
 #
 # Usage: scripts/simulate-release.sh [tag ...]
 #        (no arguments checks the version in the workspace Cargo.toml)
@@ -37,12 +38,15 @@ extract_step() {
 }
 
 RESOLVE=$(extract_step "Resolve version" "Generate Changelog")
-CHANGELOG_STEP=$(extract_step "Generate Changelog" "Create Release and Upload")
+CHANGELOG_STEP=$(extract_step "Generate Changelog" "Build the release payload")
+PAYLOAD_STEP=$(extract_step "Build the release payload" "Create the release")
 
-if [ -z "$RESOLVE" ] || [ -z "$CHANGELOG_STEP" ]; then
-    echo "error: could not extract the release steps from the workflow" >&2
-    exit 1
-fi
+for step in "$RESOLVE" "$CHANGELOG_STEP" "$PAYLOAD_STEP"; do
+    if [ -z "$step" ]; then
+        echo "error: could not extract the release steps from the workflow" >&2
+        exit 1
+    fi
+done
 
 check_tag() {
     local tag="$1"
@@ -50,7 +54,7 @@ check_tag() {
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
 
-    # The runner substitutes the expression with the tag name.
+    # The runner substitutes the expressions with the real values.
     echo "$RESOLVE" \
         | sed "s#\${{ github.event.inputs.tag || github.ref_name }}#$tag#" \
         > "$work/resolve.sh"
@@ -70,26 +74,62 @@ check_tag() {
     cp "$CHANGELOG" "$work/CHANGELOG.md"
     ( cd "$work" && bash changelog.sh )
 
-    local body
-    body=$(sed -n '/^changelog<<EOF$/,/^EOF$/p' "$GITHUB_OUTPUT")
+    echo "$PAYLOAD_STEP" \
+        | sed "s#\${{ github.event.inputs.tag || github.ref_name }}#$tag#" \
+        | sed "s#\${{ steps.version.outputs.prerelease }}#$prerelease#" \
+        | sed "s#\${{ steps.version.outputs.make_latest }}#$make_latest#" \
+        > "$work/payload.sh"
+    ( cd "$work" && bash payload.sh > /dev/null )
 
     echo "tag:            $tag"
     echo "  base:         $base"
     echo "  prerelease:   $prerelease"
     echo "  make_latest:  $make_latest"
-    echo "  body lines:   $(printf '%s\n' "$body" | grep -c . || true)"
+    echo "  body lines:   $(grep -c . "$work/changelog.md" || true)"
 
     local failed=0
     [ -n "$base" ] || { echo "  FAIL: no base version"; failed=1; }
     [ -n "$prerelease" ] || { echo "  FAIL: no prerelease flag"; failed=1; }
     [ -n "$make_latest" ] || { echo "  FAIL: no make_latest flag"; failed=1; }
-    if [ -z "$body" ]; then
+    if [ ! -s "$work/changelog.md" ]; then
         echo "  FAIL: the changelog body is empty"
         failed=1
     fi
     # A pre-release must not be marked as the latest release.
     if [ "$prerelease" = "true" ] && [ "$make_latest" != "false" ]; then
         echo "  FAIL: a pre-release cannot be the latest release"
+        failed=1
+    fi
+
+    # The payload must be valid JSON with the fields the API needs.
+    if ! python3 - "$work/release.json" "$tag" "$prerelease" "$make_latest" <<'PY'
+import json
+import sys
+
+path, tag, prerelease, make_latest = sys.argv[1:5]
+with open(path, encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+problems = []
+if payload.get("tag_name") != tag:
+    problems.append("tag_name is %r" % payload.get("tag_name"))
+if payload.get("prerelease") is not (prerelease == "true"):
+    problems.append("prerelease is %r" % payload.get("prerelease"))
+if payload.get("make_latest") != make_latest:
+    problems.append("make_latest is %r" % payload.get("make_latest"))
+if payload.get("draft") is not False:
+    problems.append("draft is %r" % payload.get("draft"))
+if not payload.get("body", "").strip():
+    problems.append("the body is empty")
+if payload.get("prerelease") and payload.get("make_latest") == "true":
+    problems.append("a pre-release cannot be the latest release")
+
+if problems:
+    for problem in problems:
+        print("  FAIL: " + problem)
+    sys.exit(1)
+PY
+    then
         failed=1
     fi
     return $failed
