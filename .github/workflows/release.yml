@@ -22,6 +22,7 @@ jobs:
       prerelease: ${{ steps.version.outputs.prerelease }}
       make_latest: ${{ steps.version.outputs.make_latest }}
       version: ${{ steps.version.outputs.base }}
+      linux_sha: ${{ steps.zip.outputs.linux_sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -46,7 +47,9 @@ jobs:
           cd dist
           zip ../cloudseed-linux-x86_64.zip cloudseed
           cd ..
+          sha=$(sha256sum cloudseed-linux-x86_64.zip | awk '{print $1}')
           echo "zip_path=cloudseed-linux-x86_64.zip" >> $GITHUB_OUTPUT
+          echo "linux_sha=$sha" >> $GITHUB_OUTPUT
       - name: Resolve version
         id: version
         run: |
@@ -141,8 +144,34 @@ jobs:
           7z a ..\cloudseed-windows-x86_64.zip cloudseed.exe
           cd ..
           echo "zip_path=cloudseed-windows-x86_64.zip" >> $env:GITHUB_OUTPUT
+          $sha = (Get-FileHash cloudseed-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower()
+          echo "windows_sha=$sha" >> $env:GITHUB_OUTPUT
         shell: powershell
       - name: Upload the Windows asset
         run: gh release upload "${{ needs.build-linux.outputs.release_tag }}" "${{ steps.zip.outputs.zip_path }}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The checksum file lets a user verify the download. It is written on
+      # the windows job, which is the last one to finish, so both archives
+      # exist by then. The hashes come from the two uploads, so the file is
+      # generated from the real artifacts and not from a second build.
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          linux_zip="cloudseed-linux-x86_64.zip"
+          windows_zip="cloudseed-windows-x86_64.zip"
+          linux_sha="${{ needs.build-linux.outputs.linux_sha }}"
+          windows_sha="${{ steps.zip.outputs.windows_sha }}"
+          if [ -z "$linux_sha" ] || [ -z "$windows_sha" ]; then
+            echo "::error::missing a SHA256 for SHA256SUMS"
+            exit 1
+          fi
+          # The standard format for `sha256sum -c`: hash, two spaces, filename.
+          printf '%s  %s\n%s  %s\n' "$linux_sha" "$linux_zip" "$windows_sha" "$windows_zip" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload the checksums asset
+        run: gh release upload "${{ needs.build-linux.outputs.release_tag }}" "SHA256SUMS" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -166,7 +166,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "cloudseed-cli"
-version = "2.2.0-rc.5"
+version = "2.2.0-rc.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "cloudseed-core"
-version = "2.2.0-rc.5"
+version = "2.2.0-rc.6"
 dependencies = [
  "anyhow",
  "serde",
@@ -193,7 +193,7 @@ dependencies = [
 
 [[package]]
 name = "cloudseed-providers"
-version = "2.2.0-rc.5"
+version = "2.2.0-rc.6"
 dependencies = [
  "anyhow",
  "cloudseed-core",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "cloudseed-templates"
-version = "2.2.0-rc.5"
+version = "2.2.0-rc.6"
 dependencies = [
  "anyhow",
  "cloudseed-core",

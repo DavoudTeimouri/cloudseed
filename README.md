@@ -25,13 +25,26 @@ Download from [GitHub Releases](https://github.com/DavoudTeimouri/cloudseed/rele
 
 ```bash
 # Linux
-curl -L -o cloudseed https://github.com/DavoudTeimouri/cloudseed/releases/latest/download/cloudseed-linux-x86_64
-chmod +x cloudseed
-
-# Windows (PowerShell)
-Invoke-WebRequest -Uri "https://github.com/DavoudTeimouri/cloudseed/releases/latest/download/cloudseed-windows-x86_64.zip" -OutFile cloudseed.zip
-Expand-Archive cloudseed.zip
+curl -L -o cloudseed.zip
+https://github.com/DavoudTeimouri/cloudseed/releases/latest/download/cloudseed-linux-x86_64.zip
+curl -L -O
+https://github.com/DavoudTeimouri/cloudseed/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+unzip cloudseed.zip && chmod +x cloudseed && ./cloudseed --version
 ```
+
+```powershell
+# Windows PowerShell
+Invoke-WebRequest -Uri
+"https://github.com/DavoudTeimouri/cloudseed/releases/latest/download/cloudseed-windows-x86_64.zip"
+-OutFile cloudseed.zip
+Expand-Archive cloudseed.zip
+.\cloudseed.exe --version
+```
+
+The Linux command verifies the download before unpacking it, against the
+`SHA256SUMS` asset the release publishes. `--ignore-missing` skips the
+`cloudseed-windows-x86_64.zip` entry that a Linux install does not have.
 
 ### Build from source
 
