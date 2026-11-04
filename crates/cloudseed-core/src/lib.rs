@@ -363,6 +363,18 @@ impl Config {
         }
     }
 
+    /// Serialize this config in the given format (`yaml`, `yml`, or `toml`),
+    /// regardless of any file extension.
+    pub fn serialize_format(&self, format: &str) -> anyhow::Result<String> {
+        match format {
+            "yaml" | "yml" => serde_yaml::to_string(self).map_err(anyhow::Error::from),
+            "toml" => toml::to_string(self).map_err(anyhow::Error::from),
+            other => Err(anyhow::anyhow!(
+                "unsupported format '{other}'; expected yaml, yml, or toml"
+            )),
+        }
+    }
+
     /// The hostname to apply, derived from `hostname` or `hostname_prefix`.
     pub fn resolved_hostname(&self) -> String {
         if !self.hostname.is_empty() {
@@ -530,8 +542,8 @@ impl Config {
     }
 
     /// Generate the list of files to create for this configuration.
-    pub fn generate_files(&self, provider: &dyn Provider) -> anyhow::Result<Vec<(String, String)>> {
-        provider.generate(self)
+    pub fn generate_files(&self, provider: &dyn Provider, format: Option<&str>) -> anyhow::Result<Vec<(String, String)>> {
+        provider.generate(self, format)
     }
 }
 
@@ -572,7 +584,9 @@ fn issue(field: &str, message: impl Into<String>) -> ValidationIssue {
 /// Trait for cloud providers.
 pub trait Provider {
     /// Generate files based on the configuration.
-    fn generate(&self, config: &Config) -> anyhow::Result<Vec<(String, String)>>;
+    /// `format`, when `Some`, overrides the file-extension-based format for
+    /// the `cloudseed` output file (`yaml` or `toml`).
+    fn generate(&self, config: &Config, format: Option<&str>) -> anyhow::Result<Vec<(String, String)>>;
 }
 
 #[cfg(test)]

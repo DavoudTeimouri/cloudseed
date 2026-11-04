@@ -467,7 +467,7 @@ impl App {
             Panel::Generate => {
                 let output = self.fields[1].value.trim().to_string();
                 let dry_run = parse_bool(&self.fields[2].value);
-                cmd_generate(&value, Some(&output), dry_run)
+                cmd_generate(&value, Some(&output), "yaml", dry_run)
             }
             Panel::Validate => cmd_validate(&value, parse_bool(&self.fields[1].value)),
             Panel::Completion => cmd_completion(&value),

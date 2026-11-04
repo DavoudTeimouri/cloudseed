@@ -676,6 +676,7 @@ mod tests {
     #[test]
     fn user_data_hostname_only_includes_hostname() {
         let mut config = base_config();
+        config.use_platform_hostname = false;
         config.modules = vec!["hostname".to_string()];
         let ud = super::user_data(&config).unwrap();
         assert!(ud.contains("hostname: vm-test"));
@@ -687,6 +688,7 @@ mod tests {
     fn user_data_network_dhcp() {
         let mut config = base_config();
         config.modules = vec!["network".to_string()];
+        config.net_dns.clear(); // no nameservers, so no "addresses:" field at all
         let ud = super::user_data(&config).unwrap();
         assert!(ud.contains("network:"));
         assert!(ud.contains("version: 2"));

@@ -22,7 +22,7 @@ impl PlatformProvider {
 }
 
 impl Provider for PlatformProvider {
-    fn generate(&self, config: &Config) -> anyhow::Result<Vec<(String, String)>> {
+    fn generate(&self, config: &Config, format: Option<&str>) -> anyhow::Result<Vec<(String, String)>> {
         let dir = self.output_dir();
         let mut files = Vec::new();
 
@@ -90,9 +90,16 @@ impl Provider for PlatformProvider {
         }
 
         files.push((format!("{dir}/README.txt"), readme(config, &dir)));
+                let config_filename = match format {
+            Some("toml") => "cloudseed.toml",
+            _ => "cloudseed.yaml",
+        };
         files.push((
-            format!("{dir}/cloudseed.yaml"),
-            config.serialize("cloudseed.yaml")?,
+            format!("{dir}/{config_filename}"),
+            match format {
+                Some("toml") => config.serialize_format("toml")?,
+                _ => config.serialize("cloudseed.yaml")?,
+            },
         ));
 
         Ok(files)
@@ -304,7 +311,7 @@ mod tests {
     #[test]
     fn generate_linux_produces_user_data_meta_data_readme_config() {
         let p = PlatformProvider::new("kvm", "linux");
-        let files = p.generate(&linux_config()).unwrap();
+        let files = p.generate(&linux_config(), None).unwrap();
         let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.iter().any(|n| n.ends_with("kvm-linux/user-data")));
         assert!(names.iter().any(|n| n.ends_with("kvm-linux/meta-data")));
@@ -318,7 +325,7 @@ mod tests {
     #[test]
     fn generate_windows_produces_cloudbase_init_and_user_data() {
         let p = PlatformProvider::new("vsphere", "windows");
-        let files = p.generate(&windows_config()).unwrap();
+        let files = p.generate(&windows_config(), None).unwrap();
         let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.iter().any(|n| n.ends_with("vsphere-windows/cloudbase-init.conf")));
         assert!(names.iter().any(|n| n.ends_with("vsphere-windows/cloudbase-init-unattend.conf")));
@@ -330,7 +337,7 @@ mod tests {
     #[test]
     fn generate_template_cleanup_when_module_enabled() {
         let p = PlatformProvider::new("kvm", "linux");
-        let files = p.generate(&windows_config()).unwrap();
+        let files = p.generate(&windows_config(), None).unwrap();
         let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.iter().any(|n| n.ends_with("kvm-linux/template-cleanup.sh")));
     }
@@ -340,7 +347,7 @@ mod tests {
         let p = PlatformProvider::new("vsphere", "linux");
         let mut c = linux_config();
         c.export_vsphere_spec = true;
-        let files = p.generate(&c).unwrap();
+        let files = p.generate(&c, None).unwrap();
         let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.iter().any(|n| n.ends_with("vsphere-linux/vsphere-customization-spec.xml")));
     }
@@ -350,7 +357,7 @@ mod tests {
         let p = PlatformProvider::new("vsphere", "linux");
         let mut c = linux_config();
         c.modules = vec!["vsphere_scripts".to_string()];
-        let files = p.generate(&c).unwrap();
+        let files = p.generate(&c, None).unwrap();
         let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.iter().any(|n| n.ends_with("vsphere-linux/vsphere-pre-script.sh")));
         assert!(names.iter().any(|n| n.ends_with("vsphere-linux/vsphere-post-script.sh")));
@@ -359,7 +366,7 @@ mod tests {
     #[test]
     fn user_data_is_valid_yaml() {
         let p = PlatformProvider::new("kvm", "linux");
-        let files = p.generate(&linux_config()).unwrap();
+        let files = p.generate(&linux_config(), None).unwrap();
         let user_data = files
             .iter()
             .find(|(n, _)| n.ends_with("kvm-linux/user-data"))
@@ -370,5 +377,23 @@ mod tests {
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&user_data["#cloud-config\n".len()..]).unwrap();
         assert!(parsed.is_mapping());
+    }
+
+    #[test]
+    fn generate_toml_format_writes_cloudseed_toml() {
+        let p = PlatformProvider::new("kvm", "linux");
+        let files = p.generate(&linux_config(), Some("toml")).unwrap();
+        let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names
+            .iter()
+            .any(|n| n.ends_with("kvm-linux/cloudseed.toml")));
+        let toml_content = files
+            .iter()
+            .find(|(n, _)| n.ends_with("kvm-linux/cloudseed.toml"))
+            .map(|(_, c)| c)
+            .unwrap();
+        assert!(toml_content.contains("version ="));
+        assert!(toml_content.contains("name ="));
+        assert!(toml_content.contains("platform ="));
     }
 }

@@ -114,6 +114,10 @@ enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Output format for cloudseed.yaml: yaml or toml
+        #[arg(long, default_value = "yaml")]
+        format: String,
+
         /// Dry run: show what would be generated without writing files
         #[arg(long)]
         dry_run: bool,
@@ -304,12 +308,13 @@ fn set_timezone(config_path: &str, zone: &str) -> anyhow::Result<String> {
 }
 
 /// Generate cloud-init files. Returns the text to display to the user.
-fn cmd_generate(config_path: &str, output: Option<&str>, dry_run: bool) -> anyhow::Result<String> {
+fn cmd_generate(config_path: &str, output: Option<&str>, format: &str, dry_run: bool) -> anyhow::Result<String> {
     let config = Config::from_file(config_path)
         .map_err(|e| anyhow::anyhow!("failed to load {}: {}", config_path, e))?;
     let provider = get_provider(&config.platform, &config.os_type)?;
+    let format = if format == "yaml" { None } else { Some(format) };
     let files = config
-        .generate_files(&*provider)
+        .generate_files(&*provider, format)
         .map_err(|e| anyhow::anyhow!("failed to generate files: {}", e))?;
 
     if dry_run {
@@ -499,7 +504,7 @@ fn cmd_write_to_cloud_init_path(config_path: &str, path: &str) -> anyhow::Result
     }
 
     let provider = get_provider(&config.platform, &config.os_type)?;
-    let files = config.generate_files(&*provider)?;
+    let files = config.generate_files(&*provider, None)?;
     let user_data = files
         .iter()
         .find(|(name, _)| name.ends_with("user-data"))
@@ -552,8 +557,9 @@ fn main() {
         Commands::Generate {
             config,
             output,
+            format,
             dry_run,
-        } => cmd_generate(&config, output.as_deref(), dry_run),
+        } => cmd_generate(&config, output.as_deref(), &format, dry_run),
         Commands::Validate { path, fix_it } => cmd_validate(&path, fix_it),
         Commands::Completion { shell } => cmd_completion(&shell).map(|script| {
             print!("{}", script);
@@ -637,7 +643,7 @@ mod tests {
     fn generate_dry_run_lists_files_without_writing() {
         let cfg = TempConfig::new("dry", minimal_config());
         let out_dir = std::env::temp_dir().join(format!("cs-out-{}", std::process::id()));
-        let out = cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), true).unwrap();
+        let out = cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), "yaml", true).unwrap();
         assert!(out.contains("Dry run"), "got: {}", out);
         assert!(out.contains("user-data"), "got: {}", out);
         assert!(!out_dir.exists(), "dry run must not create the output dir");
@@ -648,7 +654,7 @@ mod tests {
         let cfg = TempConfig::new("layout", minimal_config());
         let out_dir = std::env::temp_dir().join(format!("cs-layout-{}", std::process::id()));
         let _ = fs::remove_dir_all(&out_dir);
-        cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), false).unwrap();
+        cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), "yaml", false).unwrap();
         let sub = out_dir.join("kvm-linux");
         assert!(sub.join("user-data").is_file(), "user-data missing");
         assert!(sub.join("meta-data").is_file(), "meta-data missing");
@@ -663,7 +669,7 @@ mod tests {
     #[test]
     fn generate_rejects_an_unknown_platform() {
         let cfg = TempConfig::new("plat", "version: \"1.0\"\nname: t\nplatform: local\n");
-        let err = cmd_generate(&cfg.path_str(), None, true).unwrap_err();
+        let err = cmd_generate(&cfg.path_str(), None, "yaml", true).unwrap_err();
         assert!(
             err.to_string().contains("Unsupported platform"),
             "got: {}",
@@ -673,7 +679,7 @@ mod tests {
 
     #[test]
     fn generate_rejects_a_missing_file() {
-        let err = cmd_generate("/nonexistent/cloudseed.yaml", None, true).unwrap_err();
+        let err = cmd_generate("/nonexistent/cloudseed.yaml", None, "yaml", true).unwrap_err();
         assert!(err.to_string().contains("failed to load"), "got: {}", err);
     }
 
@@ -868,7 +874,7 @@ mod tests {
         );
         let out_dir = std::env::temp_dir().join(format!("cs-tbp-{}", std::process::id()));
         let _ = fs::remove_dir_all(&out_dir);
-        cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), false).unwrap();
+        cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), "yaml", false).unwrap();
         let sub = out_dir.join("kvm-linux");
         assert!(
             sub.join("template-cleanup.sh").is_file(),
@@ -888,7 +894,7 @@ mod tests {
         let cfg = TempConfig::new("notbp", minimal_config());
         let out_dir = std::env::temp_dir().join(format!("cs-notbp-{}", std::process::id()));
         let _ = fs::remove_dir_all(&out_dir);
-        cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), false).unwrap();
+        cmd_generate(&cfg.path_str(), Some(out_dir.to_str().unwrap()), "yaml", false).unwrap();
         assert!(
             !out_dir.join("kvm-linux/template-cleanup.sh").exists(),
             "cleanup script written without the module"
@@ -948,7 +954,7 @@ mod tests {
     #[test]
     fn set_timezone_writes_the_zone() {
         let cfg = TempConfig::new("tz", minimal_config());
-        cmd_generate(&cfg.path_str(), None, true).unwrap();
+        cmd_generate(&cfg.path_str(), None, "yaml", true).unwrap();
         set_timezone(&cfg.path_str(), "Europe/Rome").unwrap();
         let after = fs::read_to_string(&cfg.path).unwrap();
         assert!(after.contains("Europe/Rome"), "got: {}", after);
