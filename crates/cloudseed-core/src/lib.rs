@@ -574,3 +574,275 @@ pub trait Provider {
     /// Generate files based on the configuration.
     fn generate(&self, config: &Config) -> anyhow::Result<Vec<(String, String)>>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_config() -> Config {
+        Config {
+            version: "1.0".to_string(),
+            name: "test".to_string(),
+            platform: "vsphere".to_string(),
+            os_type: "linux".to_string(),
+            modules: Vec::new(),
+            variables: HashMap::new(),
+            hostname: String::new(),
+            hostname_prefix: "vm".to_string(),
+            use_platform_hostname: true,
+            username: "ubuntu".to_string(),
+            password: String::new(),
+            plaintext_password: false,
+            password_rounds: 5000,
+            sudo: true,
+            lock_password: false,
+            ssh_pwauth: true,
+            disable_root: true,
+            ssh_keys: Vec::new(),
+            net_mode: "dhcp".to_string(),
+            net_interface: "eth0".to_string(),
+            net_address: String::new(),
+            net_netmask: "255.255.255.0".to_string(),
+            net_gateway: String::new(),
+            net_dns: vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()],
+            net_search: Vec::new(),
+            net_domain: String::new(),
+            let_platform_handle_network: false,
+            package_upgrade: true,
+            packages: Vec::new(),
+            timezone: None,
+            locale: "en_US.UTF-8".to_string(),
+            keyboard_layout: "us".to_string(),
+            grow_device: "/dev/sda".to_string(),
+            grow_partition: "1".to_string(),
+            ntp_servers: vec!["pool.ntp.org".to_string()],
+            let_platform_handle_ntp: false,
+            write_files: Vec::new(),
+            bootcmd: Vec::new(),
+            firstboot: Vec::new(),
+            final_message: String::new(),
+            sysprep: false,
+            sysprep_organization: String::new(),
+            sysprep_owner: String::new(),
+            sysprep_computer_prefix: "WIN".to_string(),
+            sysprep_timezone: String::new(),
+            sysprep_locale: String::new(),
+            sysprep_product_key: String::new(),
+            export_vsphere_spec: false,
+            vsphere_spec_name: "CloudSeed-Spec".to_string(),
+            vsphere_pre_script: String::new(),
+            vsphere_post_script: String::new(),
+            use_sample_scripts: false,
+        }
+    }
+
+    #[test]
+    fn default_config_validates_cleanly() {
+        let config = base_config();
+        let issues = config.validate();
+        assert!(issues.is_empty(), "expected no issues, got {:?}", issues);
+    }
+
+    #[test]
+    fn unknown_platform_is_an_issue() {
+        let mut config = base_config();
+        config.platform = "aws".to_string();
+        let issues = config.validate();
+        assert!(!issues.is_empty());
+        assert!(issues.iter().any(|i| i.field == "platform"));
+    }
+
+    #[test]
+    fn unknown_os_type_is_an_issue() {
+        let mut config = base_config();
+        config.os_type = "macos".to_string();
+        let issues = config.validate();
+        assert!(!issues.is_empty());
+        assert!(issues.iter().any(|i| i.field == "os_type"));
+    }
+
+    #[test]
+    fn unknown_module_is_an_issue() {
+        let mut config = base_config();
+        config.modules = vec!["made_up".to_string()];
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| i.field == "modules"));
+    }
+
+    #[test]
+    fn static_mode_needs_address() {
+        let mut config = base_config();
+        config.net_mode = "static".to_string();
+        config.net_address.clear();
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| i.field == "net_address"));
+    }
+
+    #[test]
+    fn static_mode_needs_gateway() {
+        let mut config = base_config();
+        config.net_mode = "static".to_string();
+        config.net_address = "10.0.0.5".to_string();
+        config.net_gateway.clear();
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| i.field == "net_gateway"));
+    }
+
+    #[test]
+    fn windows_needs_sysprep() {
+        let mut config = base_config();
+        config.os_type = "windows".to_string();
+        config.sysprep = false;
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| i.field == "sysprep"));
+    }
+
+    #[test]
+    fn locked_password_without_ssh_keys_is_an_issue() {
+        let mut config = base_config();
+        config.lock_password = true;
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| i.field == "lock_password"));
+    }
+
+    #[test]
+    fn plaintext_password_is_an_issue() {
+        let mut config = base_config();
+        config.password = "secret".to_string();
+        let issues = config.validate();
+        assert!(issues.iter().any(|i| i.field == "password"));
+    }
+
+    #[test]
+    fn hashed_password_is_not_an_issue() {
+        let mut config = base_config();
+        config.password = "$6$rounds=5000$salt$hash".to_string();
+        let issues = config.validate();
+        assert!(!issues.iter().any(|i| i.field == "password"));
+    }
+
+    #[test]
+    fn disabled_module_fields_are_flagged() {
+        let mut config = base_config();
+        // Only hostname enabled; password belongs to users module which is disabled.
+        config.modules = vec!["hostname".to_string()];
+        config.password = "secret".to_string();
+        let issues = config.validate();
+        assert!(issues
+            .iter()
+            .any(|i| i.field == "password" && i.message.contains("users")));
+    }
+
+    #[test]
+    fn module_enabled_empty_list_means_all_except_opt_in() {
+        let config = base_config();
+        assert!(!config.module_enabled("hostname")); // platform owns it by default
+        assert!(config.module_enabled("network"));
+        assert!(config.module_enabled("ntp"));
+        assert!(!config.module_enabled("template_best_practices"));
+    }
+
+    #[test]
+    fn module_enabled_listed_only() {
+        let mut config = base_config();
+        config.modules = vec!["hostname".to_string()];
+        config.use_platform_hostname = false;
+        assert!(config.module_enabled("hostname"));
+        assert!(!config.module_enabled("network")); // not in the list
+    }
+
+    #[test]
+    fn platform_hostname_disables_hostname_module() {
+        let mut config = base_config();
+        config.use_platform_hostname = false;
+        assert!(config.module_enabled("hostname"));
+    }
+
+    #[test]
+    fn platform_network_disables_network_module() {
+        let mut config = base_config();
+        config.let_platform_handle_network = true;
+        assert!(!config.module_enabled("network"));
+    }
+
+    #[test]
+    fn resolved_hostname_from_name() {
+        let mut config = base_config();
+        config.hostname_prefix = "vm".to_string();
+        config.name = "web01".to_string();
+        assert_eq!(config.resolved_hostname(), "vm-web01");
+    }
+
+    #[test]
+    fn resolved_hostname_explicit() {
+        let mut config = base_config();
+        config.hostname = "myhost".to_string();
+        assert_eq!(config.resolved_hostname(), "myhost");
+    }
+
+    #[test]
+    fn resolved_hostname_prefix_only() {
+        let mut config = base_config();
+        config.name.clear();
+        assert_eq!(config.resolved_hostname(), "vm");
+    }
+
+    #[test]
+    fn resolved_timezone_none() {
+        let config = base_config();
+        assert_eq!(config.resolved_timezone(), None);
+    }
+
+    #[test]
+    fn resolved_timezone_some() {
+        let mut config = base_config();
+        config.timezone = Some(TimezoneConfig {
+            zone: Some("Europe/Berlin".to_string()),
+            interactive: false,
+        });
+        assert_eq!(config.resolved_timezone(), Some("Europe/Berlin".to_string()));
+    }
+
+    #[test]
+    fn fix_it_hashes_plaintext_password() {
+        let mut config = base_config();
+        config.password = "hunter2".to_string();
+        config.fix_it().unwrap();
+        assert!(config.password.starts_with("$6$"));
+        assert_ne!(config.password, "hunter2");
+    }
+
+    #[test]
+    fn fix_it_leaves_hash_unchanged() {
+        let mut config = base_config();
+        config.password = "$6$rounds=5000$salt$hash".to_string();
+        let before = config.password.clone();
+        config.fix_it().unwrap();
+        assert_eq!(config.password, before);
+    }
+
+    #[test]
+    fn fix_it_skips_plaintext_password_flag() {
+        let mut config = base_config();
+        config.password = "hunter2".to_string();
+        config.plaintext_password = true;
+        config.fix_it().unwrap();
+        assert_eq!(config.password, "hunter2");
+    }
+
+    #[test]
+    fn is_crypt_hash_detects_hashes() {
+        assert!(super::is_crypt_hash("$6$rounds=5000$salt$hash"));
+        assert!(!super::is_crypt_hash("hunter2"));
+        assert!(!super::is_crypt_hash(""));
+    }
+
+    #[test]
+    fn extension_yaml_yml_toml() {
+        assert_eq!(super::extension(std::path::Path::new("a.yaml")), "yaml");
+        assert_eq!(super::extension(std::path::Path::new("a.yml")), "yml");
+        assert_eq!(super::extension(std::path::Path::new("a.toml")), "toml");
+        assert_eq!(super::extension(std::path::Path::new("a.json")), "json");
+        assert_eq!(super::extension(std::path::Path::new("noext")), "");
+    }
+}

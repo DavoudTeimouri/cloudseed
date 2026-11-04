@@ -5,6 +5,15 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0-rc.7] - 2026-10-28
+
+### Added
+
+- **Unit tests for `cloudseed-core`**: `validate()` issues (bad platform, bad os_type, unknown module, static missing address/gateway, windows without sysprep, locked password without ssh_keys, plaintext password, disabled-module fields), `module_enabled()` (empty list, listed only, platform overrides), `resolved_hostname()`, `resolved_timezone()`, `fix_it()` (hashes plaintext, leaves hash alone, skips plaintext flag), `is_crypt_hash()`, extension parsing.
+- **Unit tests for `cloudseed-templates`**: `netmask_to_prefix()` / `cidr()`, `meta_data()`, `user_data()` (header, hostname-only, network dhcp/static, users with/without password, ssh keys), `sysprep_unattend()` (computer name, timezone, UTC default), `template_cleanup_linux()` / `template_cleanup_windows()`, `vsphere_customization_spec()`.
+- **Unit tests for `cloudseed-providers`**: `output_dir()`, `get_provider` (accepts documented platforms/oses, rejects unknown), `generate()` file lists (linux: user-data/meta-data/README/cloudseed.yaml; windows: cloudbase-init/sysprep; template-cleanup; vsphere spec/scripts), user-data parses as valid YAML.
+- `serde_yaml` dev-dependency on `cloudseed-providers` for the YAML parse test.
+
 ## [2.2.0] - 2026-10-22
 
 ### Fixed
