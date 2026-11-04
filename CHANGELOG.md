@@ -5,6 +5,12 @@ All notable changes to CloudSeed will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0-rc.8] - 2026-10-28
+
+### Added
+
+- **Windows smoke test in CI**: `release.yml` now downloads the published `cloudseed-windows-x86_64.zip` and runs `cloudseed.exe --version` on `windows-latest`, so a release is only created if the artifact actually executes.
+
 ## [2.2.0-rc.7] - 2026-10-28
 
 ### Added

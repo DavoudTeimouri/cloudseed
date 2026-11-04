@@ -175,3 +175,15 @@ jobs:
         run: gh release upload "${{ needs.build-linux.outputs.release_tag }}" "SHA256SUMS" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Smoke test: download the published Windows ZIP and run it. This
+      # verifies the artifact CI just built actually executes on Windows,
+      # not merely that it compiled.
+      - name: Smoke test the Windows binary
+        shell: powershell
+        run: |
+          $tag = "${{ needs.build-linux.outputs.release_tag }}"
+          $url = "https://github.com/${{ github.repository }}/releases/download/$tag/cloudseed-windows-x86_64.zip"
+          Invoke-WebRequest -Uri $url -OutFile cloudseed-smoke.zip
+          Expand-Archive cloudseed-smoke.zip -DestinationPath smoke
+          & .\smoke\cloudseed.exe --version
